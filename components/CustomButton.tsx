@@ -27,19 +27,19 @@ export const CustomButton: React.FC<CustomButtonProps> = ({
 
     switch (variant) {
       case "outline":
-        return "bg-[#F8F6FF] text-[#7A5AF8] border-2 border-[#7A5AF8] hover:bg-[#F0ECFF] shadow-xs active:scale-[0.98]";
+        return "bg-white text-[#1E3765] border border-[#1E3765] hover:bg-[#F2F5FB] shadow-xs active:scale-[0.98]";
       case "active":
-        return "bg-[#663FE8] text-white shadow-md shadow-[#663FE8]/30 hover:bg-[#5B34DD] active:scale-[0.98] border border-transparent";
+        return "bg-[#0F2342] text-white shadow-md shadow-[#0F2342]/20 hover:bg-[#081a34] active:scale-[0.98] border border-transparent";
       case "primary":
       default:
-        return "bg-[#7A5AF8] text-white shadow-md shadow-[#7A5AF8]/30 hover:bg-[#6C48F0] active:bg-[#6039E8] active:scale-[0.98] border border-transparent";
+        return "bg-[#1E3765] text-white shadow-md shadow-[#1E3765]/20 hover:bg-[#0F2342] active:bg-[#0F2342] active:scale-[0.98] border border-transparent";
     }
   };
 
   return (
     <button
       disabled={isButtonDisabled}
-      className={`h-[56px] px-6 rounded-2xl font-bold text-lg tracking-wide transition-all duration-150 flex items-center justify-center select-none ${
+      className={`h-10 px-4 rounded-lg font-bold text-sm tracking-wide transition-all duration-150 flex items-center justify-center select-none ${
         fullWidth ? "w-full" : "w-auto"
       } ${getVariantStyles()} ${className}`}
       {...props}
