@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Pagination from "./Pagination";
-import StatusBadge from "./StatusBadge";
 
 export interface Column<T> {
   key: string;
@@ -25,10 +24,19 @@ export interface CustomTableProps<T> {
   onPageChange?: (page: number) => void;
   totalItems?: number;
   itemsPerPage?: number;
+  showPagination?: boolean;
   className?: string;
 }
 
-export function CustomTable<T extends Record<string, any>>({
+function formatCellValue(value: unknown): React.ReactNode {
+  if (typeof value === "string" || typeof value === "number") {
+    return value;
+  }
+
+  return "-";
+}
+
+export function CustomTable<T extends { id?: string | number }>({
   columns,
   data,
   keyExtractor = (item, index) => item.id ?? index,
@@ -40,6 +48,7 @@ export function CustomTable<T extends Record<string, any>>({
   onPageChange,
   totalItems = 120,
   itemsPerPage = 5,
+  showPagination = true,
   className = "",
 }: CustomTableProps<T>) {
   const [internalSelected, setInternalSelected] = useState<(string | number)[]>(selectedIds);
@@ -161,7 +170,7 @@ export function CustomTable<T extends Record<string, any>>({
                       >
                         {col.render
                           ? col.render(row, idx)
-                          : row[col.key] ?? "-"}
+                          : formatCellValue(row[col.key as keyof T])}
                       </td>
                     ))}
                   </tr>
@@ -180,13 +189,15 @@ export function CustomTable<T extends Record<string, any>>({
           <span className="font-semibold text-slate-800">{totalItems}</span> data
         </div>
 
-        <div className="flex items-center">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={onPageChange}
-          />
-        </div>
+        {showPagination && (
+          <div className="flex items-center">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={onPageChange}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
