@@ -24,24 +24,33 @@ export interface CustomDropdownProps {
 
 export const CustomDropdown: React.FC<CustomDropdownProps> = ({
   label,
-  placeholder = "Dropdown testing miliki D1",
-  categoryTitle = "TESTING",
-  categoryBadge = "3 Active",
-  items = [
-    { id: "node", label: "Node.js", subLabel: "v2.3.9" },
-    { id: "react", label: "React.js", subLabel: "yes yes" },
-    { id: "next", label: "Next.js", subLabel: "v2.4.1-rc" },
-  ],
-  value = "react",
+  placeholder = "Pilih opsi",
+  categoryTitle,
+  categoryBadge,
+  items = [],
+  value,
   onChange,
   className = "",
   defaultOpen = false,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [selectedId, setSelectedId] = useState<string | number>(value);
+  const [selectedId, setSelectedId] = useState<string | number | undefined>(value);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selectedItem = items.find((item) => item.id === selectedId);
+  const displayBadge = categoryBadge ?? (items.length > 0 ? `${items.length} Opsi` : undefined);
+
+  useEffect(() => {
+    if (value !== undefined) {
+      setSelectedId(value);
+    }
+  }, [value]);
+
+  const currentSelectedId = value !== undefined ? value : selectedId;
+  const selectedItem = items.find(
+    (item) =>
+      item.id === currentSelectedId ||
+      String(item.id).toLowerCase() === String(currentSelectedId).toLowerCase()
+  );
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -65,7 +74,7 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full max-w-[340px] font-sans ${className}`}
+      className={`relative w-full font-sans ${className}`}
     >
       {label && (
         <label className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -81,8 +90,12 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
           isOpen ? "border-slate-800 ring-1 ring-slate-800" : "border-slate-300 hover:border-slate-400"
         } rounded-lg px-4 py-3 text-left flex items-center justify-between shadow-xs transition-all duration-150`}
       >
-        <span className="text-[15px] font-semibold text-slate-900 truncate">
-          {placeholder}
+        <span
+          className={`text-[15px] font-semibold truncate ${
+            selectedItem ? "text-slate-900" : "text-slate-500"
+          }`}
+        >
+          {selectedItem ? selectedItem.label : placeholder}
         </span>
         <div className="flex items-center text-slate-500 shrink-0 ml-2">
           {isOpen ? (
@@ -111,19 +124,25 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
       {isOpen && (
         <div className="absolute left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in duration-100">
           {/* Header Row: Category & Active Count */}
-          {(categoryTitle || categoryBadge) && (
+          {(categoryTitle || displayBadge) && (
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 text-xs">
-              <span className="font-bold tracking-wider text-slate-500 uppercase">
-                {categoryTitle}
-              </span>
-              <span className="text-slate-600 font-medium">{categoryBadge}</span>
+              {categoryTitle && (
+                <span className="font-bold tracking-wider text-slate-500 uppercase">
+                  {categoryTitle}
+                </span>
+              )}
+              {displayBadge && (
+                <span className="text-slate-600 font-medium ml-auto">{displayBadge}</span>
+              )}
             </div>
           )}
 
           {/* List Items */}
           <div className="py-1">
             {items.map((item) => {
-              const isSelected = item.id === selectedId;
+              const isSelected =
+                item.id === currentSelectedId ||
+                String(item.id).toLowerCase() === String(currentSelectedId).toLowerCase();
               return (
                 <button
                   key={item.id}

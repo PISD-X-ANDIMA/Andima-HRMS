@@ -50,88 +50,61 @@ export const Pagination: React.FC<PaginationProps> = ({
 
       {/* Page Numbers */}
       <div className="flex items-center gap-1.5 sm:gap-2">
-        {/* Page 1 */}
-        <button
-          type="button"
-          onClick={() => handlePageClick(1)}
-          className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
-            currentPage === 1
-              ? "bg-[#0F172A] text-white shadow-xs"
-              : "text-slate-700 hover:bg-slate-100 cursor-pointer"
-          }`}
-        >
-          1
-        </button>
+        {(() => {
+          if (totalPages <= 7) {
+            return Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                type="button"
+                onClick={() => handlePageClick(page)}
+                className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
+                  currentPage === page
+                    ? "bg-[#0F172A] text-white shadow-xs"
+                    : "text-slate-700 hover:bg-slate-100 cursor-pointer"
+                }`}
+              >
+                {page}
+              </button>
+            ));
+          }
 
-        {/* Page 2 */}
-        <button
-          type="button"
-          onClick={() => handlePageClick(2)}
-          className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
-            currentPage === 2
-              ? "bg-[#0F172A] text-white shadow-xs"
-              : "text-slate-700 hover:bg-slate-100 cursor-pointer"
-          }`}
-        >
-          2
-        </button>
+          const pages: (number | string)[] = [];
+          if (currentPage <= 4) {
+            pages.push(1, 2, 3, 4, 5, "...", totalPages);
+          } else if (currentPage >= totalPages - 3) {
+            pages.push(1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+          } else {
+            pages.push(1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages);
+          }
 
-        {/* Page 3 */}
-        <button
-          type="button"
-          onClick={() => handlePageClick(3)}
-          className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
-            currentPage === 3
-              ? "bg-[#0F172A] text-white shadow-xs"
-              : "text-slate-700 hover:bg-slate-100 cursor-pointer"
-          }`}
-        >
-          3
-        </button>
-
-        {/* Page 4 */}
-        <button
-          type="button"
-          onClick={() => handlePageClick(4)}
-          className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
-            currentPage === 4
-              ? "bg-[#0F172A] text-white shadow-xs"
-              : "text-slate-700 hover:bg-slate-100 cursor-pointer"
-          }`}
-        >
-          4
-        </button>
-
-        {/* Page 5 */}
-        <button
-          type="button"
-          onClick={() => handlePageClick(5)}
-          className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
-            currentPage === 5
-              ? "bg-[#0F172A] text-white shadow-xs"
-              : "text-slate-700 hover:bg-slate-100 cursor-pointer"
-          }`}
-        >
-          5
-        </button>
-
-        {/* Ellipsis */}
-        <span className="w-8 h-10 flex items-center justify-center text-slate-400 font-bold tracking-wider text-sm select-none">
-          ...
-        </span>
-
-        {/* Page 24 */}
-        <button
-          type="button"
-          onClick={() => handlePageClick(24)}
-          className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
-            currentPage === 24
-              ? "bg-[#0F172A] text-white shadow-xs"
-              : "text-slate-700 hover:bg-slate-100 cursor-pointer"
-          }`}
-        >
-          24
-        </button>
+          return pages.map((p, idx) => {
+            if (p === "...") {
+              return (
+                <span
+                  key={`ellipsis-${idx}`}
+                  className="w-8 h-10 flex items-center justify-center text-slate-400 font-bold tracking-wider text-sm select-none"
+                >
+                  ...
+                </span>
+              );
+            }
+            const pageNum = Number(p);
+            return (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => handlePageClick(pageNum)}
+                className={`w-10 h-10 rounded-lg text-sm font-semibold flex items-center justify-center transition-all ${
+                  currentPage === pageNum
+                    ? "bg-[#0F172A] text-white shadow-xs"
+                    : "text-slate-700 hover:bg-slate-100 cursor-pointer"
+                }`}
+              >
+                {pageNum}
+              </button>
+            );
+          });
+        })()}
       </div>
 
       {/* Next Button */}
