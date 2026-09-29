@@ -2,29 +2,23 @@
 
 import {
   Bell,
-  BriefcaseBusiness,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   CircleHelp,
-  ClipboardList,
   Clock3,
   FilePlus2,
   Filter,
-  LayoutDashboard,
   Menu,
   MessageSquareText,
   MoreHorizontal,
   Paperclip,
   Search,
   Send,
-  Settings,
-  ShieldCheck,
   Ticket,
-  UsersRound,
   X,
 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
+import Sidebar from "@/components/Sidebar";
 
 type TicketStatus = "SUBMITTED" | "IN_REVIEW" | "IN_PROGRESS" | "RESOLVED" | "REJECTED";
 type ViewRole = "manager" | "employee";
@@ -185,7 +179,6 @@ export default function EmployeeReportTicketPage() {
   const [viewRole, setViewRole] = useState<ViewRole>("manager");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | TicketStatus>("ALL");
-  const [isHrmsOpen, setIsHrmsOpen] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [followUp, setFollowUp] = useState("");
@@ -266,37 +259,7 @@ export default function EmployeeReportTicketPage() {
 
   return (
     <main className="min-h-screen bg-[#f7f8ff] text-[#121b2e]">
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col bg-[#0f2342] px-4 py-5 text-[#d9e2fc] shadow-lg transition-transform lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="flex items-center gap-3 px-2">
-          <div className="grid size-9 place-items-center rounded-lg bg-[#069494] shadow-sm"><BriefcaseBusiness size={19} className="text-white" /></div>
-          <div><p className="text-xl font-bold tracking-[-0.5px] text-white">ANDIMA</p><p className="text-xs text-[#d9e2fc]/80">Logistics Suite</p></div>
-          <button onClick={() => setIsSidebarOpen(false)} className="ml-auto rounded p-1 text-[#d9e2fc] lg:hidden" aria-label="Tutup navigasi"><X size={18} /></button>
-        </div>
-
-        <nav className="mt-8 space-y-1.5 text-sm font-semibold">
-          <SidebarItem icon={<LayoutDashboard size={16} />} label="Dashboard" />
-          <SidebarItem icon={<BriefcaseBusiness size={16} />} label="POS" />
-          <SidebarItem icon={<UsersRound size={16} />} label="CRM" suffix={<ChevronRight size={15} />} />
-          <div>
-            <button onClick={() => setIsHrmsOpen((value) => !value)} className="flex w-full items-center justify-between rounded-lg bg-[#069494] px-3 py-2.5 text-white shadow-sm">
-              <span className="flex items-center gap-3"><ClipboardList size={17} /> HRMS</span><ChevronDown size={16} className={isHrmsOpen ? "rotate-0" : "-rotate-90"} />
-            </button>
-            {isHrmsOpen && <div className="ml-5 mt-2 border-l border-[#d9e2fc]/20 pl-3">
-              <SidebarSubItem label="Employee Profile" />
-              <SidebarSubItem label="Attendance & Productivity" />
-              <SidebarSubItem label="Feedback & Reward" />
-              <SidebarSubItem label="Employee Report & Ticket" active />
-            </div>}
-          </div>
-          <SidebarItem icon={<ShieldCheck size={16} />} label="MID" suffix={<ChevronRight size={15} />} />
-        </nav>
-
-        <div className="mt-auto space-y-3">
-          <div className="rounded-lg border border-[#d9e2fc]/15 bg-[#1e3765] p-3"><div className="flex items-center gap-2 text-[11px] font-semibold text-white"><CircleHelp size={14} className="text-[#77d8cd]" /> Customer Support</div><p className="mt-1 text-[10px] text-[#d9e2fc]/80">24/7 Operations Line</p></div>
-          <SidebarItem icon={<Settings size={15} />} label="Settings" />
-          <div className="flex items-center gap-2 rounded-lg px-2 py-1.5"><span className="grid size-7 place-items-center rounded-full bg-[#16834b] text-[10px] font-bold text-white">NN</span><div><p className="text-xs font-bold text-white">Nick Nelson</p><p className="text-[10px] text-[#d9e2fc]/75">Web Developer</p></div></div>
-        </div>
-      </aside>
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <section className="min-h-screen lg:pl-[260px]">
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-[#d9e2fc] bg-white px-4 shadow-[0_1px_1px_rgba(0,0,0,0.05)] sm:px-6">
@@ -329,13 +292,7 @@ export default function EmployeeReportTicketPage() {
   );
 }
 
-function SidebarItem({ icon, label, suffix }: { icon: React.ReactNode; label: string; suffix?: React.ReactNode }) {
-  return <button className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition hover:bg-white/10"><span className="flex items-center gap-3">{icon}{label}</span>{suffix}</button>;
-}
 
-function SidebarSubItem({ label, active = false }: { label: string; active?: boolean }) {
-  return <button className={`mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${active ? "bg-[#b0c6d4] font-bold text-[#1e3765]" : "text-[#d9e2fc] hover:bg-white/10"}`}><span className={`size-1.5 rounded-full ${active ? "bg-[#069494]" : "bg-[#d9e2fc]/40"}`} />{label}</button>;
-}
 
 function FilterButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
   return <button onClick={onClick} className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition ${active ? "bg-[#1e3765] text-white" : "bg-[#f1f3ff] text-[#4d5f81] hover:bg-[#d9e2fc]"}`}>{children}</button>;

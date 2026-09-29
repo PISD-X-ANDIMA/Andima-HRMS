@@ -247,7 +247,7 @@ export default function LoginPage() {
       );
 
       setTimeout(() => {
-        router.replace("/employees");
+        router.replace("/manajemen-posisi-dan-kompetensi");
         router.refresh();
       }, 1000);
     } catch (error) {
