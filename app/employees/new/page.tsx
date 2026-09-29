@@ -2,8 +2,10 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import EmployeeCreateForm from "@/components/EmployeeCreateForm";
+import EmployeeManagementAccessDenied from "@/components/hrms/EmployeeManagementAccessDenied";
 import HrmsShell from "@/components/hrms/HrmsShell";
 import type { DepartmentOption, PositionOption } from "@/types/employee";
+import { canManageEmployeeProfiles, getD3AppRole } from "@/utils/employee-access";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function NewEmployeePage() {
@@ -15,6 +17,16 @@ export default async function NewEmployeePage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  const userRole = await getD3AppRole(supabase, user.id);
+
+  if (!canManageEmployeeProfiles(userRole)) {
+    return (
+      <HrmsShell userEmail={user.email} userRole={userRole}>
+        <EmployeeManagementAccessDenied title="Add a New Employee" />
+      </HrmsShell>
+    );
   }
 
   const [departmentsResult, positionsResult] = await Promise.all([
@@ -37,7 +49,7 @@ export default async function NewEmployeePage() {
     });
 
     return (
-      <HrmsShell userEmail={user.email}>
+      <HrmsShell userEmail={user.email} userRole={userRole}>
         <section className="mx-auto max-w-5xl rounded-xl border border-red-200 bg-white p-6 text-red-700 shadow-sm">
           <h1 className="text-xl font-bold">Add a New Employee</h1>
           <p className="mt-2">Pilihan position atau department belum dapat dimuat. Silakan coba lagi nanti.</p>
@@ -50,14 +62,14 @@ export default async function NewEmployeePage() {
   }
 
   return (
-    <HrmsShell userEmail={user.email}>
-      <section className="mx-auto max-w-5xl space-y-6">
-        <Link className="inline-flex text-sm font-semibold text-[#1E3765] hover:text-[#0F2342]" href="/employees">← Employee Directory</Link>
+    <HrmsShell userEmail={user.email} userRole={userRole}>
+      <section className="mx-auto max-w-6xl space-y-7">
+        <Link className="inline-flex text-sm font-semibold text-[#1E3765] hover:text-[#155DFC]" href="/employees">← Employee Directory</Link>
 
         <header>
           <p className="text-xs font-bold tracking-[0.16em] text-[#1E3765]">EMPLOYEE MANAGEMENT</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#121B2E]">Add a New Employee</h1>
-          <p className="mt-2 text-sm text-slate-600">Fill in all required fields to create a new employee profile.</p>
+          <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Add a New Employee</h1>
+          <p className="mt-3 text-base text-slate-600">Fill in all required fields to create a new employee profile.</p>
         </header>
 
         <EmployeeCreateForm

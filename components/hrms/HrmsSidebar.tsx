@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { BarChart3, CalendarDays, ChevronRight, FileText, MessageSquareHeart, Users } from "lucide-react";
 import LogoutButton from "@/components/LogoutButton";
+import type { D3AppRole } from "@/utils/employee-access";
 
 interface HrmsSidebarProps {
   userEmail?: string;
+  userRole?: D3AppRole | null;
 }
 
 function initialsFromEmail(email?: string) {
@@ -27,7 +29,14 @@ function InactiveMenuItem({ icon: Icon, children }: { icon: typeof CalendarDays;
   );
 }
 
-export default function HrmsSidebar({ userEmail }: HrmsSidebarProps) {
+function roleLabel(role?: D3AppRole | null) {
+  if (role === "HR") return "Human Resources";
+  if (role === "MANAGER") return "Manager";
+  if (role === "EMPLOYEE") return "Employee";
+  return "HRMS User";
+}
+
+export default function HrmsSidebar({ userEmail, userRole }: HrmsSidebarProps) {
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-white/10 bg-[#0F2342] px-4 py-6 text-[#D9E2FC] lg:flex">
       <div className="border-b border-white/10 px-3 pb-6">
@@ -45,7 +54,7 @@ export default function HrmsSidebar({ userEmail }: HrmsSidebarProps) {
           </div>
           <Link
             href="/employees"
-            className="ml-4 flex items-center gap-3 rounded-lg bg-[#1E3765] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#29497f]"
+            className="ml-4 flex items-center gap-3 rounded-r-lg border-l-2 border-[#577CFC] bg-[#1E3765] px-3 py-2.5 text-sm font-semibold text-white shadow-[3px_3px_12px_rgba(0,0,0,0.16)] transition hover:bg-[#29497f]"
           >
             <span className="size-1.5 rounded-full bg-[#D9E2FC]" />
             Employee Profile
@@ -66,7 +75,7 @@ export default function HrmsSidebar({ userEmail }: HrmsSidebarProps) {
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white">{userEmail?.split("@")[0] || "Authenticated User"}</p>
-            <p className="truncate text-xs text-[#D9E2FC]/70">{userEmail || "HRMS session"}</p>
+            <p className="truncate text-xs text-[#D9E2FC]/70">{roleLabel(userRole)}</p>
           </div>
         </div>
         <div className="mt-3 border-t border-white/10 pt-3">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { Link2, Mail, MapPin, Phone } from "lucide-react";
 import HrmsShell from "@/components/hrms/HrmsShell";
 import HrmsStatusPill from "@/components/hrms/HrmsStatusPill";
 import type {
@@ -10,6 +11,7 @@ import type {
   EmployeeProfile,
   EmployeeSkill,
 } from "@/types/employee";
+import { canManageEmployeeProfiles, getD3AppRole } from "@/utils/employee-access";
 import { createClient } from "@/utils/supabase/server";
 
 interface EmployeeProfilePageProps {
@@ -63,9 +65,9 @@ function initials(fullName: string) {
 
 function ProfileSection({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-xl border border-[#D9E2FC] bg-white p-5 shadow-[0_4px_16px_rgba(15,35,66,0.04)] ${className}`}>
-      <h2 className="text-base font-bold text-[#121B2E]">{title}</h2>
-      <div className="mt-4">{children}</div>
+    <section className={`rounded-[10px] border border-[rgba(87,138,252,0.22)] bg-white p-5 shadow-[3px_3px_16px_rgba(87,138,252,0.16)] sm:p-6 ${className}`}>
+      <h2 className="text-lg font-bold tracking-tight text-[#121B2E]">{title}</h2>
+      <div className="mt-5">{children}</div>
     </section>
   );
 }
@@ -94,6 +96,9 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
     redirect("/login");
   }
 
+  const userRole = await getD3AppRole(supabase, user.id);
+  const canManageEmployees = canManageEmployeeProfiles(userRole);
+
   const { data: employee, error: employeeError } = await supabase
     .from("d3_view_employee_360")
     .select(
@@ -110,7 +115,7 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
     });
 
     return (
-      <HrmsShell userEmail={user.email}>
+      <HrmsShell userEmail={user.email} userRole={userRole}>
         <section className="mx-auto max-w-7xl rounded-xl border border-red-200 bg-white p-6 text-red-700 shadow-sm">
           <h1 className="text-xl font-bold">Employee Profile</h1>
           <p className="mt-2">Profil pegawai belum dapat dimuat. Silakan coba lagi nanti.</p>
@@ -124,7 +129,7 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
 
   if (!employee) {
     return (
-      <HrmsShell userEmail={user.email}>
+      <HrmsShell userEmail={user.email} userRole={userRole}>
         <section className="mx-auto max-w-7xl rounded-xl border border-[#D9E2FC] bg-white p-6 shadow-sm">
           <h1 className="text-xl font-bold text-[#121B2E]">Employee Profile</h1>
           <p className="mt-2 text-slate-600">Data pegawai tidak ditemukan.</p>
@@ -183,128 +188,96 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
   );
 
   return (
-    <HrmsShell userEmail={user.email}>
-      <section className="mx-auto max-w-7xl space-y-5">
-        <div className="flex items-center justify-between gap-4">
-          <Link className="text-sm font-semibold text-[#1E3765] hover:text-[#0F2342]" href="/employees">← Employee Directory</Link>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Link className="inline-flex h-10 items-center rounded-lg border border-[#1E3765] bg-white px-4 text-sm font-bold text-[#1E3765] transition hover:bg-[#F2F5FB]" href={`/employees/${encodeURIComponent(employee.employee_id)}/edit`}>
-              Edit Profile
-            </Link>
-            <Link className="inline-flex h-10 items-center rounded-lg bg-[#1E3765] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#0F2342]" href={`/employees/${encodeURIComponent(employee.employee_id)}/status`}>
-              Ubah Employment Status
-            </Link>
+    <HrmsShell userEmail={user.email} userRole={userRole}>
+      <section className="mx-auto max-w-[1240px] space-y-6 xl:space-y-7">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <Link className="text-sm font-semibold text-[#1E3765] transition hover:text-[#155DFC]" href="/employees">← Employee Directory</Link>
+            <h1 className="mt-4 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Employee Profile</h1>
           </div>
+          {canManageEmployees && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              <Link className="inline-flex h-11 items-center justify-center rounded-[15px] border border-[#155DFC] bg-[#EEF4FF] px-5 text-sm font-bold text-[#155DFC] transition hover:bg-[#DCE8FF]" href={`/employees/${encodeURIComponent(employee.employee_id)}/edit`}>
+                Edit Profile
+              </Link>
+              <Link className="inline-flex h-11 items-center justify-center rounded-[15px] bg-[#155DFC] px-5 text-sm font-bold text-white shadow-[3px_3px_14px_rgba(87,138,252,0.4)] transition hover:bg-[#0D4FDB]" href={`/employees/${encodeURIComponent(employee.employee_id)}/status`}>
+                Ubah Employment Status
+              </Link>
+            </div>
+          )}
         </div>
 
-        <header className="rounded-xl border border-[#D9E2FC] bg-white p-5 shadow-[0_4px_16px_rgba(15,35,66,0.04)] sm:p-6">
-          <p className="text-xs font-bold tracking-[0.16em] text-[#1E3765]">EMPLOYEE PROFILE</p>
-          <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-[#D9E2FC] text-lg font-bold text-[#1E3765]">{initials(employee.full_name)}</span>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-[#121B2E]">{employee.full_name}</h1>
-                <p className="mt-1 text-sm text-slate-600">{[employee.position_title, employee.department_name, employee.work_location].filter(Boolean).join(" · ") || "Belum tersedia"}</p>
-                <p className="mt-2 text-xs font-semibold text-[#1E3765]">{employee.employee_id} · Joined {formatDate(employee.join_date)} · Tenure: {tenure}</p>
+        <header className="rounded-[10px] border border-[rgba(87,138,252,0.3)] bg-white p-6 shadow-[3px_3px_20px_rgba(87,138,252,0.5)] sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
+              <span className="flex size-[90px] shrink-0 items-center justify-center rounded-full bg-[#1E3765] text-3xl font-extrabold tracking-tight text-white shadow-[0_0_0_8px_rgba(87,138,252,0.16)]">{initials(employee.full_name)}</span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-3xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[38px]">{employee.full_name}</h2>
+                  <HrmsStatusPill value={employee.employment_status} />
+                </div>
+                <p className="mt-2 text-base font-medium text-[#1E3765]">{[employee.position_title, employee.department_name, employee.work_location].filter(Boolean).join(" · ") || "Belum tersedia"}</p>
+                <p className="mt-3 text-sm font-semibold text-[#121B2E]">{employee.employee_id} <span className="px-1.5 text-[#577CFC]">·</span> Joined {formatDate(employee.join_date)} <span className="px-1.5 text-[#577CFC]">·</span> Tenure: {tenure}</p>
+                <p className="mt-4 flex max-w-2xl items-start gap-2 rounded-lg border border-[#D9E2FC] bg-[#F5F8FF] px-3 py-2 text-xs leading-5 text-[#1E3765]">
+                  <Link2 className="mt-0.5 size-4 shrink-0 text-[#155DFC]" aria-hidden="true" />
+                  Attendance, certification, feedback, and reward data are linked through this Employee ID.
+                </p>
               </div>
             </div>
-            <HrmsStatusPill value={employee.employment_status} />
           </div>
         </header>
 
-        <div className="grid gap-5 xl:grid-cols-3">
-          <div className="space-y-5 xl:col-span-2">
-            <ProfileSection title="Contacts">
-              <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Phone</dt><dd className="mt-1 text-sm font-medium text-[#121B2E]">{displayValue(employee.phone)}</dd></div>
-                <div><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Email</dt><dd className="mt-1 break-all text-sm font-medium text-[#121B2E]">{displayValue(employee.email)}</dd></div>
-                <div><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Work Location</dt><dd className="mt-1 text-sm font-medium text-[#121B2E]">{displayValue(employee.work_location)}</dd></div>
-                <div><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Identity Type</dt><dd className="mt-1 text-sm font-medium text-[#121B2E]">{displayValue(employee.identity_type)}</dd></div>
-                <div><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Identity Number</dt><dd className="mt-1 text-sm font-medium text-[#121B2E]">{displayValue(employee.identity_number)}</dd></div>
-              </dl>
-            </ProfileSection>
+        <div className="grid gap-5 lg:grid-cols-2 xl:gap-6">
+          <ProfileSection title="Contact Information">
+            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+              <div className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#155DFC]/10 text-[#155DFC]"><Mail className="size-4" aria-hidden="true" /></span><div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Email</dt><dd className="mt-0.5 break-all text-sm font-semibold text-[#121B2E]">{displayValue(employee.email)}</dd></div></div>
+              <div className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#155DFC]/10 text-[#155DFC]"><Phone className="size-4" aria-hidden="true" /></span><div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Phone</dt><dd className="mt-0.5 text-sm font-semibold text-[#121B2E]">{displayValue(employee.phone)}</dd></div></div>
+              <div className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#155DFC]/10 text-[#155DFC]"><MapPin className="size-4" aria-hidden="true" /></span><div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Work Location</dt><dd className="mt-0.5 text-sm font-semibold text-[#121B2E]">{displayValue(employee.work_location)}</dd></div></div>
+              <div><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Identity</dt><dd className="mt-0.5 text-sm font-semibold text-[#121B2E]">{[employee.identity_type, employee.identity_number].filter(Boolean).join(" · ") || "Belum tersedia"}</dd></div>
+            </dl>
+          </ProfileSection>
 
-            <ProfileSection title="Skill">
-              {skills.length === 0 ? <EmptyState /> : (
-                <div className="flex flex-wrap gap-2.5">
-                  {skills.map((skill) => (
-                    <div className="rounded-lg bg-[#F2F5FB] px-3 py-2" key={skill.competency_id}>
-                      <p className="text-sm font-semibold text-[#1E3765]">{displayValue(skill.competencies?.name ?? null)}</p>
-                      {skill.proficiency_level && <p className="mt-0.5 text-xs text-slate-500">{skill.proficiency_level}</p>}
-                      {skill.evidence_notes && <p className="mt-1 max-w-60 text-xs text-slate-500">{skill.evidence_notes}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ProfileSection>
+          <ProfileSection title="Skill &amp; Competency">
+            {skills.length === 0 ? <EmptyState>No skill data available.</EmptyState> : (
+              <div className="flex flex-wrap gap-2">
+                {skills.map((skill) => (
+                  <span className="inline-flex max-w-full items-center rounded-full border border-[#577CFC]/45 bg-[#155DFC]/10 px-3 py-1.5 text-xs font-bold text-[#1E3765]" key={skill.competency_id} title={skill.evidence_notes || undefined}>
+                    <span className="truncate">{displayValue(skill.competencies?.name ?? null)}</span>{skill.proficiency_level && <span className="ml-1.5 shrink-0 border-l border-[#577CFC]/40 pl-1.5 text-[10px] font-semibold text-[#577CFC]">{skill.proficiency_level}</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </ProfileSection>
 
-            <ProfileSection title="Certification">
-              {certifications.length === 0 ? <EmptyState /> : (
-                <div className="space-y-3">
-                  {certifications.map((certification, index) => (
-                    <article className="flex flex-col gap-3 rounded-lg border border-[#D9E2FC] p-4 sm:flex-row sm:items-start sm:justify-between" key={`${certification.credential_id ?? certification.title ?? "certification"}-${index}`}>
-                      <div>
-                        <h3 className="text-sm font-bold text-[#121B2E]">{displayValue(certification.title)}</h3>
-                        <p className="mt-1 text-sm text-slate-600">{displayValue(certification.issuing_organization)}</p>
-                        <p className="mt-1 text-xs text-slate-500">Expiry: {formatDate(certification.expiry_date)}</p>
-                      </div>
-                      <HrmsStatusPill value={certification.status} />
-                    </article>
-                  ))}
-                </div>
-              )}
-            </ProfileSection>
-          </div>
+          <ProfileSection title="Certification">
+            {certifications.length === 0 ? <EmptyState>Belum tersedia</EmptyState> : (
+              <div className="space-y-3">
+                {certifications.map((certification, index) => (
+                  <article className="flex flex-col gap-3 border-b border-[#D9E2FC] pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between" key={`${certification.credential_id ?? certification.title ?? "certification"}-${index}`}>
+                    <div className="min-w-0"><h3 className="text-sm font-bold text-[#121B2E]">{displayValue(certification.title)}</h3><p className="mt-1 text-xs font-medium text-[#1E3765]">{displayValue(certification.issuing_organization)}</p><p className="mt-2 text-xs leading-5 text-slate-500">Issued {formatDate(certification.issue_date)} · Expires {formatDate(certification.expiry_date)}</p>{certification.credential_id && <p className="mt-1 text-[11px] text-slate-500">Credential ID: {certification.credential_id}</p>}</div>
+                    <HrmsStatusPill value={certification.status} />
+                  </article>
+                ))}
+              </div>
+            )}
+          </ProfileSection>
 
-          <div className="space-y-5">
-            <ProfileSection title="Attendance Summary">
-              {attendances.length === 0 ? <EmptyState>Belum ada data attendance.</EmptyState> : (
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded-lg bg-emerald-50 px-2 py-3"><p className="text-xl font-bold text-emerald-700">{attendanceSummary.present}</p><p className="mt-1 text-[11px] font-semibold text-emerald-700">Present</p></div>
-                  <div className="rounded-lg bg-amber-50 px-2 py-3"><p className="text-xl font-bold text-amber-700">{attendanceSummary.late}</p><p className="mt-1 text-[11px] font-semibold text-amber-700">Late</p></div>
-                  <div className="rounded-lg bg-rose-50 px-2 py-3"><p className="text-xl font-bold text-rose-700">{attendanceSummary.absent}</p><p className="mt-1 text-[11px] font-semibold text-rose-700">Absent</p></div>
-                </div>
-              )}
-            </ProfileSection>
+          <ProfileSection title="Attendance Summary">
+            {attendances.length === 0 ? <EmptyState>Belum ada data attendance.</EmptyState> : (
+              <><div className="grid grid-cols-3 gap-3 text-center"><div className="rounded-lg border border-emerald-500/20 bg-emerald-50/60 px-2 py-3"><p className="text-2xl font-extrabold text-emerald-700">{attendanceSummary.present}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Present</p></div><div className="rounded-lg border border-amber-500/20 bg-amber-50/60 px-2 py-3"><p className="text-2xl font-extrabold text-amber-700">{attendanceSummary.late}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">Late</p></div><div className="rounded-lg border border-rose-500/20 bg-rose-50/60 px-2 py-3"><p className="text-2xl font-extrabold text-rose-700">{attendanceSummary.absent}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-rose-700">Absent</p></div></div><div className="mt-5 space-y-2 border-t border-[#D9E2FC] pt-4">{attendances.map((attendance, index) => (<article className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#F5F8FF] px-3 py-2.5" key={`${attendance.date ?? "attendance"}-${index}`}><div><p className="text-xs font-bold text-[#121B2E]">{formatDate(attendance.date)}</p><p className="mt-0.5 text-[11px] text-slate-500">{formatTime(attendance.clock_in)} – {formatTime(attendance.clock_out)}{attendance.notes ? ` · ${attendance.notes}` : ""}</p></div><HrmsStatusPill value={attendance.status} /></article>))}</div></>
+            )}
+          </ProfileSection>
 
-            <ProfileSection title="Feedback &amp; Reward">
-              {feedbackRewards.length === 0 ? <EmptyState /> : (
-                <div className="space-y-3">
-                  {feedbackRewards.slice(0, 3).map((feedbackReward, index) => (
-                    <article className="border-b border-[#D9E2FC]/70 pb-3 last:border-0 last:pb-0" key={`${feedbackReward.created_at ?? "feedback"}-${index}`}>
-                      <div className="flex items-start justify-between gap-3"><p className="text-sm font-bold text-[#121B2E]">{displayValue(feedbackReward.title)}</p><span className="text-xs font-semibold text-[#1E3765]">{feedbackReward.points === null ? "—" : `${feedbackReward.points} pts`}</span></div>
-                      <p className="mt-1 text-xs text-slate-500">{[feedbackReward.type, feedbackReward.category].filter(Boolean).join(" · ")}</p>
-                      {feedbackReward.message && <p className="mt-2 text-sm text-slate-600">{feedbackReward.message}</p>}
-                    </article>
-                  ))}
-                </div>
-              )}
-            </ProfileSection>
-          </div>
+          <ProfileSection title="Feedback &amp; Reward" className="lg:col-span-2">
+            {feedbackRewards.length === 0 ? <EmptyState>Belum tersedia</EmptyState> : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {feedbackRewards.map((feedbackReward, index) => (
+                  <article className="rounded-lg border border-[#D9E2FC] bg-[#F5F8FF]/70 p-4" key={`${feedbackReward.created_at ?? "feedback"}-${index}`}><div className="flex items-start justify-between gap-3"><p className="text-sm font-bold text-[#121B2E]">{displayValue(feedbackReward.title)}</p><span className="shrink-0 rounded-full border border-[#577CFC]/35 bg-white px-2 py-1 text-[10px] font-bold text-[#1E3765]">{feedbackReward.points === null ? "—" : `${feedbackReward.points} pts`}</span></div><p className="mt-1 text-[11px] font-semibold text-[#577CFC]">{[feedbackReward.type, feedbackReward.category].filter(Boolean).join(" · ") || "Feedback"}</p>{feedbackReward.message && <p className="mt-2 text-sm leading-5 text-slate-600">{feedbackReward.message}</p>}</article>
+                ))}
+              </div>
+            )}
+          </ProfileSection>
         </div>
-
-        <ProfileSection title="Attendance History">
-          {attendances.length === 0 ? <EmptyState>Belum ada data attendance.</EmptyState> : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="border-b border-[#D9E2FC] text-xs font-bold uppercase tracking-wide text-slate-500">
-                  <tr><th className="px-3 py-3">Date</th><th className="px-3 py-3">Clock In</th><th className="px-3 py-3">Clock Out</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Notes</th></tr>
-                </thead>
-                <tbody className="divide-y divide-[#D9E2FC]/60 text-slate-700">
-                  {attendances.map((attendance, index) => (
-                    <tr key={`${attendance.date ?? "attendance"}-${index}`}>
-                      <td className="px-3 py-3 font-medium">{formatDate(attendance.date)}</td>
-                      <td className="px-3 py-3">{formatTime(attendance.clock_in)}</td>
-                      <td className="px-3 py-3">{formatTime(attendance.clock_out)}</td>
-                      <td className="px-3 py-3"><HrmsStatusPill value={attendance.status} /></td>
-                      <td className="px-3 py-3">{displayValue(attendance.notes)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </ProfileSection>
       </section>
     </HrmsShell>
   );
