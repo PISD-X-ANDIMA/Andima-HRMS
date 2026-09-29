@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Bell, ChevronRight, RefreshCw, AlertCircle, CheckCircle2, XCircle } from 'lucide-react'
+import { Bell, ChevronRight, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import HeaderAccount from '@/components/HeaderAccount'
 
@@ -30,67 +30,25 @@ export type AttendanceItem = {
   correction: AttendanceCorrection | null
 }
 
-// Fallback / Demo Data Sesuai Kebutuhan FR-D3-002
-const FALLBACK_ATTENDANCES: AttendanceItem[] = [
-  {
-    id: 'ATT-001',
-    employee_id: 'EMP-AND-001',
-    full_name: 'Nadira Putri',
-    department: 'Operations',
-    date: '2026-09-27',
-    clock_in: '2026-09-27T08:02:00',
-    clock_out: '2026-09-27T17:10:00',
-    source: 'Fingerprint Main Gate',
-    correction: null,
-  },
-  {
-    id: 'ATT-002',
-    employee_id: 'EMP-AND-002',
-    full_name: 'Bagas Ramadhan',
-    department: 'Logistics',
-    date: '2026-09-27',
-    clock_in: '2026-09-27T08:25:00',
-    clock_out: '2026-09-27T17:00:00',
-    source: 'Fingerprint Main Gate',
-    correction: {
-      id: 'COR-001',
-      correction_type: 'CLOCK_IN',
-      proposed_clock_in: '08:00',
-      reason: 'Keterlambatan karena pemadaman listrik di gerbang utama saat scan fingerprint.',
-      status: 'PENDING',
-      created_at: '2026-09-27 08:30',
-    },
-  },
-  {
-    id: 'ATT-003',
-    employee_id: 'EMP-AND-004',
-    full_name: 'Raka Prasetyo',
-    department: 'Warehouse',
-    date: '2026-09-26',
-    clock_in: '2026-09-26T08:00:00',
-    clock_out: '2026-09-26T12:30:00',
-    source: 'Fingerprint Warehouse',
-    correction: null,
-  },
-  {
-    id: 'ATT-004',
-    employee_id: 'EMP-AND-005',
-    full_name: 'Salsa Maharani',
-    department: 'HR & Legal',
-    date: '2026-09-26',
-    clock_in: '2026-09-26T08:00:00',
-    clock_out: null,
-    source: 'Fingerprint Main Gate',
-    correction: {
-      id: 'COR-002',
-      correction_type: 'CLOCK_OUT',
-      proposed_clock_out: '17:00',
-      reason: 'Lupa scan fingerprint saat pulang kantor karena mati lampu.',
-      status: 'APPROVED',
-      created_at: '2026-09-26 17:15',
-    },
-  },
-]
+type AttendanceEmployee = {
+  employee_id: string
+  full_name: string
+  department_id: string | null
+  d3_departments: { name: string } | null
+}
+
+type AttendanceQueryRow = {
+  id: string
+  employee_id: string
+  date: string
+  clock_in: string | null
+  clock_out: string | null
+  work_duration_minutes: number | null
+  status: string | null
+  source: string | null
+  d3_employee: AttendanceEmployee | null
+  d3_attendance_corrections: AttendanceCorrection[] | null
+}
 
 export default function AttendancePageUI() {
   const [attendances, setAttendances] = useState<AttendanceItem[]>([])
@@ -101,14 +59,13 @@ export default function AttendancePageUI() {
   const [errorMessage, setErrorMessage] = useState('')
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  // Fetch data dari Supabase
+  // Fetch data dari Supabase (Disamakan persis dengan halaman Attendance Productivity)
   async function fetchAttendanceData() {
     try {
       setLoading(true)
       setErrorMessage('')
       const supabase = createClient()
 
-      // Supabase Query dari d3_attendances & d3_employees / d3_attendance_corrections
       const { data, error } = await supabase
         .from('d3_attendances')
         .select(`
@@ -117,14 +74,12 @@ export default function AttendancePageUI() {
           date,
           clock_in,
           clock_out,
-          work_duration_minutes,
           status,
-          source,
-          d3_employees (
+          d3_employee!fk_d3_attendances_d3_employee (
             employee_id,
             full_name,
             department_id,
-            d3_departments (
+            d3_departments!fk_d3_employee_d3_departments (
               name
             )
           ),
@@ -142,23 +97,27 @@ export default function AttendancePageUI() {
 
       if (error) {
         console.warn('Supabase fetch query notice:', error.message)
-        // Jika belum ada table atau RLS restrict, gunakan fallback
-        setAttendances(FALLBACK_ATTENDANCES)
-        setSelectedItem(FALLBACK_ATTENDANCES[1])
+        setErrorMessage(
+          error.code === '42501'
+            ? 'Akses dashboard memerlukan akun HRMS yang telah dipetakan.'
+            : 'Data presensi belum dapat dimuat dari Supabase.'
+        )
+        setAttendances([])
+        setSelectedItem(null)
         return
       }
 
-      if (data && data.length > 0) {
-        const formatted: AttendanceItem[] = data.map((item: any) => {
-          const emp = item.d3_employees || item.employees
-          const corrList = item.d3_attendance_corrections || item.corrections || []
+      if (data) {
+        const formatted: AttendanceItem[] = (data as unknown as AttendanceQueryRow[]).map((item) => {
+          const emp = item.d3_employee
+          const corrList = item.d3_attendance_corrections || []
           const corr = corrList.length > 0 ? corrList[0] : null
 
           return {
             id: item.id || `ATT-${item.employee_id}`,
             employee_id: emp?.employee_id || item.employee_id || 'EMP-AND-000',
             full_name: emp?.full_name || 'Karyawan',
-            department: emp?.d3_departments?.name || emp?.departments?.name || emp?.department_id || 'Umum',
+            department: emp?.d3_departments?.name || 'Umum',
             date: item.date || new Date().toISOString().split('T')[0],
             clock_in: item.clock_in ? (item.clock_in.includes('T') ? item.clock_in : `${item.date}T${item.clock_in}`) : `${item.date}T08:00:00`,
             clock_out: item.clock_out ? (item.clock_out.includes('T') ? item.clock_out : `${item.date}T${item.clock_out}`) : null,
@@ -178,24 +137,26 @@ export default function AttendancePageUI() {
         })
 
         setAttendances(formatted)
-        setSelectedItem(formatted[0])
-      } else {
-        // Jika database belum berisi data, tampilkan fallback data agar UI tetap bisa mendemonstrasikan data employee & attendance
-        setAttendances(FALLBACK_ATTENDANCES)
-        setSelectedItem(FALLBACK_ATTENDANCES[1])
+        if (formatted.length > 0) {
+          setSelectedItem(formatted[0])
+        } else {
+          setSelectedItem(null)
+        }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching attendance from Supabase:', err)
-      setErrorMessage(err?.message || 'Gagal memuat data dari Supabase.')
-      setAttendances(FALLBACK_ATTENDANCES)
-      setSelectedItem(FALLBACK_ATTENDANCES[1])
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Terjadi kesalahan saat menghubungkan ke Supabase.'
+      )
+      setAttendances([])
+      setSelectedItem(null)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchAttendanceData()
+    void fetchAttendanceData()
   }, [])
 
   // Action Handler Persetujuan / Penolakan Koreksi
@@ -206,7 +167,6 @@ export default function AttendancePageUI() {
       const supabase = createClient()
       const correctionId = selectedItem.correction.id
 
-      // Coba update ke Supabase jika ID valid di database
       if (correctionId && !correctionId.startsWith('COR-')) {
         const { error } = await supabase
           .from('d3_attendance_corrections')
@@ -218,7 +178,6 @@ export default function AttendancePageUI() {
         }
       }
 
-      // Update state lokal secara responsif
       const updatedAttendances = attendances.map((item) => {
         if (item.id === selectedItem.id && item.correction) {
           return {
@@ -247,10 +206,10 @@ export default function AttendancePageUI() {
       })
 
       setTimeout(() => setActionMessage(null), 4000)
-    } catch (err: any) {
+    } catch (err: unknown) {
       setActionMessage({
         type: 'error',
-        text: `Gagal memperbarui status: ${err?.message || 'Terjadi kesalahan'}`,
+        text: `Gagal memperbarui status: ${err instanceof Error ? err.message : 'Terjadi kesalahan'}`,
       })
       setTimeout(() => setActionMessage(null), 4000)
     }
@@ -340,7 +299,6 @@ export default function AttendancePageUI() {
             </span>
           </div>
 
-          {/* Action Notification Banner */}
           {actionMessage && (
             <div
               className={`mx-auto mt-4 flex max-w-[1600px] items-center gap-2 rounded-lg border p-3 text-xs font-semibold ${
@@ -395,7 +353,6 @@ export default function AttendancePageUI() {
               </button>
             </div>
 
-            {/* Search Box */}
             <input
               type="text"
               placeholder="Cari nama, NIP, atau divisi..."
@@ -514,7 +471,6 @@ export default function AttendancePageUI() {
           {selectedItem && (
             <div className="w-full shrink-0 overflow-y-auto rounded-xl border border-[#becabd]/45 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)] xl:w-[400px]">
               <div className="space-y-4">
-                {/* Header Drawer */}
                 <div className="flex items-start justify-between border-b border-[#becabd]/35 pb-3">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#4d5f81]">
@@ -527,7 +483,6 @@ export default function AttendancePageUI() {
                   </div>
                 </div>
 
-                {/* Data Raw vs Corrected Log */}
                 <div className="space-y-2 rounded-xl border border-[#becabd]/35 bg-[#f7f8ff] p-3 text-xs">
                   <div className="border-b border-[#becabd]/35 pb-1 font-bold text-[#121b2e]">
                     Data Log Original (Raw Fingerprint)
@@ -552,7 +507,6 @@ export default function AttendancePageUI() {
                   </div>
                 </div>
 
-                {/* Pengajuan Koreksi & Reason Mandatory */}
                 {selectedItem.correction ? (
                   <div
                     className={`space-y-2 rounded-xl border p-3.5 text-xs ${
@@ -607,7 +561,6 @@ export default function AttendancePageUI() {
                   </div>
                 )}
 
-                {/* Progress & Audit Trail */}
                 <div className="space-y-2 pt-2">
                   <div className="text-xs font-bold text-[#121b2e]">Progress & History Trail</div>
                   <div className="space-y-3 border-l-2 border-[#d9e2fc] pl-3 text-xs">
@@ -646,7 +599,6 @@ export default function AttendancePageUI() {
                 </div>
               </div>
 
-              {/* Tombol Action HR/Admin */}
               {selectedItem.correction?.status === 'PENDING' && (
                 <div className="mt-4 flex gap-2 border-t border-[#becabd]/35 pt-4">
                   <button

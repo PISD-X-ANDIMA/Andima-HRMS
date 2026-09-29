@@ -425,7 +425,7 @@ export default function AttendanceProductivityPage() {
               </h1>
 
               <p className="mt-1 max-w-3xl text-sm text-[#4d5f81]">
-                Monitor ringkasan kehadiran dan informasi produktivitas karyawan berdasarkan data yang terhubung dari database Supabase.
+                Monitor ringkasan kehadiran dan informasi produktivitas karyawan
               </p>
             </div>
 

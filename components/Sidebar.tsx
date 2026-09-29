@@ -42,7 +42,7 @@ function HrmsLink({ label, href }: { label: string; href: string }) {
     <Link
       href={href}
       className={`flex w-full items-center rounded-md px-3 py-2 text-xs transition-colors ${
-        isActive ? "bg-[#1e3765] text-white" : "text-[#d9e2fc]/80 hover:bg-[#1e3765] hover:text-white"
+        isActive ? "bg-[#155dfc] text-white" : "text-[#d9e2fc]/80 hover:bg-[#1e3765] hover:text-white"
       }`}
     >
       {label}
@@ -146,7 +146,7 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
         }`}
       >
         <div className="flex items-center gap-3 px-2">
-          <div className="grid size-9 place-items-center rounded-lg bg-[#069494] shadow-sm"><BriefcaseBusiness size={19} className="text-white" /></div>
+          <div className="grid size-9 place-items-center rounded-lg bg-[#155cfd] shadow-sm"><BriefcaseBusiness size={19} className="text-white" /></div>
           <div><p className="text-xl font-bold tracking-[-0.5px] text-white">ANDIMA</p><p className="text-xs text-[#d9e2fc]/80">Logistics Suite</p></div>
           <button type="button" onClick={() => setIsSidebarOpen(false)} className="ml-auto rounded p-1 text-[#d9e2fc] lg:hidden" aria-label="Tutup navigasi"><X size={18} /></button>
         </div>
@@ -156,7 +156,7 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
             <button
               type="button"
               onClick={() => setIsHrmsOpen((value) => !value)}
-              className="flex w-full items-center justify-between rounded-lg bg-[#069494] px-3 py-2.5 text-white shadow-sm"
+              className="flex w-full items-center justify-between rounded-lg bg-[#155cfd] px-3 py-2.5 text-white shadow-sm"
             >
               <span className="flex items-center gap-3"><ClipboardList size={17} /> HRMS</span>
               <ChevronDown size={16} className={`transition-transform ${isHrmsOpen ? "rotate-0" : "-rotate-90"}`} />
@@ -168,7 +168,7 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
                     type="button"
                     onClick={() => setIsD3Open((value) => !value)}
                     className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-xs transition-colors ${
-                      isD3Route ? "bg-[#1e3765] text-white" : "text-[#d9e2fc]/80 hover:bg-[#1e3765] hover:text-white"
+                      isD3Route ? "bg-[#155cfd] text-white" : "text-[#d9e2fc]/80 hover:bg-[#1e3765] hover:text-white"
                     }`}
                     aria-expanded={isD3Expanded}
                   >
