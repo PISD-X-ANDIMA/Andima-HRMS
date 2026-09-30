@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
-  Clock3,
   UsersRound,
   UserCheck,
   UserX,
@@ -17,12 +16,7 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import HeaderAccount from "@/components/HeaderAccount";
 
-type AttendanceStatus =
-  | "PRESENT"
-  | "LATE"
-  | "ABSENT"
-  | "LEAVE"
-  | string;
+type AttendanceStatus = "PRESENT" | "UNDER_MINIMUM" | "ABSENT" | "LEAVE" | string;
 
 type AttendanceRecord = {
   id: string;
@@ -53,129 +47,13 @@ type AttendanceQueryRow = {
   d3_employee: AttendanceEmployee | null;
 };
 
-// Fallback Demo Data saat data Supabase belum terisi atau RLS restrict
-const FALLBACK_ATTENDANCES: AttendanceRecord[] = [
-  {
-    id: "ATT-001",
-    employee_id: "EMP-AND-001",
-    full_name: "Nadira Putri",
-    department: "Operations",
-    date: "2026-09-27",
-    status: "PRESENT",
-    clock_in: "08:02",
-    clock_out: "17:10",
-    work_hours: 8.1,
-  },
-  {
-    id: "ATT-002",
-    employee_id: "EMP-AND-002",
-    full_name: "Bagas Ramadhan",
-    department: "Logistics",
-    date: "2026-09-27",
-    status: "LATE",
-    clock_in: "08:25",
-    clock_out: "17:00",
-    work_hours: 7.6,
-  },
-  {
-    id: "ATT-003",
-    employee_id: "EMP-AND-004",
-    full_name: "Raka Prasetyo",
-    department: "Warehouse",
-    date: "2026-09-27",
-    status: "PRESENT",
-    clock_in: "08:00",
-    clock_out: "16:30",
-    work_hours: 7.5,
-  },
-  {
-    id: "ATT-004",
-    employee_id: "EMP-AND-005",
-    full_name: "Salsa Maharani",
-    department: "HR & Legal",
-    date: "2026-09-27",
-    status: "LEAVE",
-    clock_in: null,
-    clock_out: null,
-    work_hours: null,
-  },
-  {
-    id: "ATT-005",
-    employee_id: "EMP-AND-006",
-    full_name: "Dimas Saputra",
-    department: "Operations",
-    date: "2026-09-27",
-    status: "ABSENT",
-    clock_in: null,
-    clock_out: null,
-    work_hours: null,
-  },
-  {
-    id: "ATT-006",
-    employee_id: "EMP-AND-007",
-    full_name: "Citra Lestari",
-    department: "Finance",
-    date: "2026-09-27",
-    status: "PRESENT",
-    clock_in: "07:58",
-    clock_out: "17:02",
-    work_hours: 8.1,
-  },
-  {
-    id: "ATT-007",
-    employee_id: "EMP-AND-008",
-    full_name: "Fajar Nugroho",
-    department: "Warehouse",
-    date: "2026-09-26",
-    status: "LATE",
-    clock_in: "08:21",
-    clock_out: "17:00",
-    work_hours: 7.7,
-  },
-  {
-    id: "ATT-008",
-    employee_id: "EMP-AND-009",
-    full_name: "Maya Sari",
-    department: "Logistics",
-    date: "2026-09-26",
-    status: "PRESENT",
-    clock_in: "08:04",
-    clock_out: "17:05",
-    work_hours: 8.0,
-  },
-  {
-    id: "ATT-009",
-    employee_id: "EMP-AND-010",
-    full_name: "Rizky Pratama",
-    department: "Operations",
-    date: "2026-09-26",
-    status: "ABSENT",
-    clock_in: null,
-    clock_out: null,
-    work_hours: null,
-  },
-  {
-    id: "ATT-010",
-    employee_id: "EMP-AND-011",
-    full_name: "Anisa Rahma",
-    department: "HR & Legal",
-    date: "2026-09-26",
-    status: "PRESENT",
-    clock_in: "08:01",
-    clock_out: "17:00",
-    work_hours: 8.0,
-  },
-];
-
-void FALLBACK_ATTENDANCES;
-
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   PRESENT: {
     label: "Hadir",
     className: "bg-[#eaf7f0] text-[#16834b]",
   },
-  LATE: {
-    label: "Terlambat",
+  UNDER_MINIMUM: {
+    label: "Di bawah 7 jam",
     className: "bg-[#fef9c3] text-[#b7791f]",
   },
   ABSENT: {
@@ -266,13 +144,21 @@ export default function AttendanceProductivityPage() {
               ? Number(((clockOutTime - clockInTime) / 3_600_000).toFixed(1))
               : null;
 
+          const derivedStatus: AttendanceStatus = item.status === "LEAVE"
+            ? "LEAVE"
+            : workHours !== null && workHours >= 7
+              ? "PRESENT"
+              : workHours !== null
+                ? "UNDER_MINIMUM"
+                : "ABSENT";
+
           return {
             id: item.id || `ATT-${item.employee_id}`,
             employee_id: emp?.employee_id || item.employee_id || "EMP-AND-000",
             full_name: emp?.full_name || "Karyawan",
             department: emp?.d3_departments?.name || "-",
             date: item.date || new Date().toISOString().split("T")[0],
-            status: item.status || "PRESENT",
+            status: derivedStatus,
             clock_in: clockInStr,
             clock_out: clockOutStr,
             work_hours: workHours,
@@ -325,8 +211,8 @@ export default function AttendanceProductivityPage() {
       (item) => item.status === "PRESENT"
     ).length;
 
-    const late = filteredData.filter(
-      (item) => item.status === "LATE"
+    const underMinimum = filteredData.filter(
+      (item) => item.status === "UNDER_MINIMUM"
     ).length;
 
     const absent = filteredData.filter(
@@ -353,10 +239,30 @@ export default function AttendanceProductivityPage() {
 
     return {
       present,
-      late,
+      underMinimum,
       absent,
       leave,
       averageWorkHours,
+    };
+  }, [filteredData]);
+
+  const productivitySeries = useMemo(() => {
+    const byDate = new Map<string, { total: number; count: number }>();
+    const byEmployee = new Map<string, { name: string; total: number; count: number }>();
+    filteredData.forEach((item) => {
+      if (item.work_hours === null) return;
+      const day = byDate.get(item.date) ?? { total: 0, count: 0 };
+      day.total += item.work_hours;
+      day.count += 1;
+      byDate.set(item.date, day);
+      const employee = byEmployee.get(item.employee_id) ?? { name: item.full_name, total: 0, count: 0 };
+      employee.total += item.work_hours;
+      employee.count += 1;
+      byEmployee.set(item.employee_id, employee);
+    });
+    return {
+      daily: Array.from(byDate, ([date, value]) => ({ date, hours: value.total / value.count })).sort((a, b) => a.date.localeCompare(b.date)),
+      employees: Array.from(byEmployee.values()).map((value) => ({ name: value.name, hours: value.total / value.count })).sort((a, b) => b.hours - a.hours).slice(0, 8),
     };
   }, [filteredData]);
 
@@ -429,9 +335,9 @@ export default function AttendanceProductivityPage() {
               </p>
             </div>
 
-            <span className="inline-flex w-fit items-center rounded-full border border-[#006838]/25 bg-[#eaf7f0] px-3 py-1.5 text-xs font-bold text-[#006838]">
+            {/* <span className="inline-flex w-fit items-center rounded-full border border-[#006838]/25 bg-[#eaf7f0] px-3 py-1.5 text-xs font-bold text-[#006838]">
               Role: HR / Manager
-            </span>
+            </span> */}
           </div>
 
           {errorMessage && (
@@ -558,25 +464,25 @@ export default function AttendanceProductivityPage() {
             </div>
           </div>
 
-          {/* Terlambat */}
+          {/* Di bawah minimum */}
           <div className="rounded-xl border border-[#d9e2fc] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#4d5f81]">
-                  Terlambat
+                  Di bawah 7 jam
                 </p>
 
                 <p className="mt-2 text-2xl font-bold text-[#b7791f]">
-                  {loading ? "..." : summary.late}
+                  {loading ? "..." : summary.underMinimum}
                 </p>
 
                 <p className="mt-1 text-[10px] text-[#4d5f81]">
-                  Kehadiran terlambat
+                  Durasi belum memenuhi minimum
                 </p>
               </div>
 
               <div className="grid size-9 place-items-center rounded-lg bg-[#fef9c3] text-[#b7791f]">
-                <Clock3 size={18} />
+                <TrendingUp size={18} />
               </div>
             </div>
           </div>
@@ -628,115 +534,17 @@ export default function AttendanceProductivityPage() {
           </div>
         </div>
 
-        {/* PRODUCTIVITY SUMMARY */}
-        <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_360px]">
+        {/* PRODUCTIVITY CHARTS */}
+        <div className="mt-5 grid gap-5 xl:grid-cols-[1.25fr_1fr]">
           <div className="rounded-xl border border-[#d9e2fc] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#4d5f81]">
-                  Informasi Produktivitas
-                </p>
-
-                <h2 className="mt-1 text-lg font-bold text-[#121b2e]">
-                  Monitoring Produktivitas Karyawan
-                </h2>
-
-                <p className="mt-1 text-xs text-[#4d5f81]">
-                  Informasi ditampilkan berdasarkan data presensi real-time dari Supabase database.
-                </p>
-              </div>
-
-              <div className="grid size-10 place-items-center rounded-lg bg-[#f1f3ff] text-[#4d5f81]">
-                <TrendingUp size={19} />
-              </div>
+              <div><p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#4d5f81]">Tren jam kerja</p><h2 className="mt-1 text-lg font-bold">Rata-rata jam kerja per hari</h2><p className="mt-1 text-xs text-[#4d5f81]">Periode mengikuti filter tanggal di atas.</p></div><TrendingUp size={19} className="text-[#006838]" />
             </div>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border border-[#d9e2fc] bg-[#f7f8ff] p-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#4d5f81]">
-                  Status Data
-                </p>
-
-                <p className="mt-2 text-sm font-bold text-[#16834b]">
-                  Tersambung Supabase
-                </p>
-
-                <p className="mt-1 text-[10px] leading-relaxed text-[#4d5f81]">
-                  Data karyawan & kehadiran berhasil dimuat dari database.
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-[#d9e2fc] bg-[#f7f8ff] p-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#4d5f81]">
-                  Rata-rata Jam Kerja
-                </p>
-
-                <p className="mt-2 text-xl font-bold text-[#121b2e]">
-                  {summary.averageWorkHours > 0
-                    ? `${summary.averageWorkHours.toFixed(1)} jam`
-                    : "-"}
-                </p>
-
-                <p className="mt-1 text-[10px] text-[#4d5f81]">
-                  Berdasarkan durasi presensi
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-[#d9e2fc] bg-[#f7f8ff] p-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#4d5f81]">
-                  Catatan
-                </p>
-
-                <p className="mt-2 text-sm font-bold text-[#121b2e]">
-                  Monitoring Kehadiran
-                </p>
-
-                <p className="mt-1 text-[10px] leading-relaxed text-[#4d5f81]">
-                  Data presensi digunakan untuk rekapitulasi operasional HRMS.
-                </p>
-              </div>
-            </div>
+            {productivitySeries.daily.length === 0 ? <div className="flex h-48 items-center justify-center text-xs text-[#4d5f81]">Belum ada data jam kerja untuk periode ini.</div> : <div className="mt-6 flex h-52 items-end gap-2 border-b border-l border-[#d9e2fc] px-3 pb-0 pt-4">{productivitySeries.daily.map((point) => { const max = Math.max(...productivitySeries.daily.map((item) => item.hours), 7); const height = Math.max((point.hours / max) * 100, 4); return <div key={point.date} className="group flex h-full min-w-7 flex-1 flex-col items-center justify-end gap-1"><span className="text-[9px] font-bold text-[#4d5f81] opacity-0 transition group-hover:opacity-100">{point.hours.toFixed(1)}j</span><div className="w-full rounded-t-md bg-[#069494] transition group-hover:bg-[#006838]" style={{ height: `${height}%` }} /><span className="text-[9px] text-[#4d5f81]">{point.date.slice(5)}</span></div> })}</div>}
           </div>
-
-          {/* ATTENDANCE DISTRIBUTION */}
           <div className="rounded-xl border border-[#d9e2fc] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#4d5f81]">
-              Distribusi Kehadiran
-            </p>
-
-            <h2 className="mt-1 text-lg font-bold text-[#121b2e]">
-              Status Periode
-            </h2>
-
-            <div className="mt-5 space-y-4">
-              <StatusProgress
-                label="Hadir"
-                value={summary.present}
-                total={filteredData.length}
-                barClass="bg-[#16834b]"
-              />
-
-              <StatusProgress
-                label="Terlambat"
-                value={summary.late}
-                total={filteredData.length}
-                barClass="bg-[#d6a62c]"
-              />
-
-              <StatusProgress
-                label="Tidak Hadir"
-                value={summary.absent}
-                total={filteredData.length}
-                barClass="bg-[#d64545]"
-              />
-
-              <StatusProgress
-                label="Izin / Cuti"
-                value={summary.leave}
-                total={filteredData.length}
-                barClass="bg-[#1971c2]"
-              />
-            </div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#4d5f81]">Perbandingan produktivitas</p><h2 className="mt-1 text-lg font-bold">Rata-rata per karyawan</h2><p className="mt-1 text-xs text-[#4d5f81]">Diurutkan berdasarkan jam kerja rata-rata.</p>
+            <div className="mt-5 space-y-3">{productivitySeries.employees.length === 0 ? <p className="py-12 text-center text-xs text-[#4d5f81]">Belum ada data.</p> : productivitySeries.employees.map((employee) => { const width = Math.min((employee.hours / 9) * 100, 100); return <div key={employee.name}><div className="mb-1 flex justify-between gap-2 text-[10px]"><span className="truncate font-semibold text-[#3f4940]">{employee.name}</span><span className="font-bold text-[#121b2e]">{employee.hours.toFixed(1)} jam</span></div><div className="h-2 overflow-hidden rounded-full bg-[#edf0f7]"><div className="h-full rounded-full bg-[#16834b]" style={{ width: `${width}%` }} /></div></div> })}</div>
           </div>
         </div>
 
@@ -947,11 +755,11 @@ export default function AttendanceProductivityPage() {
                 </div>
 
                 <p className="mt-2 text-[11px] leading-relaxed text-[#4d5f81]">
-                  Data kehadiran terintegrasi langsung dengan database Supabase HRMS.
+                  Penilaian durasi fleksibel: presensi memenuhi target jika total jam kerja minimal 7 jam.
                 </p>
 
-                <span className="mt-3 inline-flex rounded bg-[#eaf7f0] px-2 py-1 text-[9px] font-bold text-[#16834b]">
-                  SUPABASE TERHUBUNG
+                <span className={`mt-3 inline-flex rounded px-2 py-1 text-[9px] font-bold ${selectedItem.work_hours !== null && selectedItem.work_hours >= 7 ? 'bg-[#eaf7f0] text-[#16834b]' : 'bg-[#fef9c3] text-[#b7791f]'}`}>
+                  {selectedItem.work_hours !== null && selectedItem.work_hours >= 7 ? 'MEMENUHI 7 JAM' : 'DI BAWAH 7 JAM'}
                 </span>
               </div>
 
@@ -976,42 +784,6 @@ export default function AttendanceProductivityPage() {
 /* =========================
    COMPONENTS
 ========================= */
-
-function StatusProgress({
-  label,
-  value,
-  total,
-  barClass,
-}: {
-  label: string;
-  value: number;
-  total: number;
-  barClass: string;
-}) {
-  const percentage =
-    total > 0 ? Math.round((value / total) * 100) : 0;
-
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs font-semibold text-[#3f4940]">
-          {label}
-        </span>
-
-        <span className="text-[10px] font-bold text-[#4d5f81]">
-          {value} ({percentage}%)
-        </span>
-      </div>
-
-      <div className="h-2 overflow-hidden rounded-full bg-[#edf0f7]">
-        <div
-          className={`h-full rounded-full transition-all ${barClass}`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-    </div>
-  );
-}
 
 function DetailRow({
   label,

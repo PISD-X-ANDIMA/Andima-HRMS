@@ -42,7 +42,7 @@ function HrmsLink({ label, href }: { label: string; href: string }) {
     <Link
       href={href}
       className={`flex w-full items-center rounded-md px-3 py-2 text-xs transition-colors ${
-        isActive ? "bg-[#155dfc] text-white" : "text-[#d9e2fc]/80 hover:bg-[#1e3765] hover:text-white"
+        isActive ? "bg-[#B0C6D4] text-[#0f2324]" : "text-[#d9e2fc]/80 hover:bg-[#1e3765] hover:text-white"
       }`}
     >
       {label}
@@ -176,7 +176,7 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
                     <ChevronDown size={14} className={`transition-transform ${isD3Expanded ? "rotate-0" : "-rotate-90"}`} />
                   </button>
                   {isD3Expanded && (
-                    <div className="ml-4 mt-1 border-l border-[#d9e2fc]/15 pl-2">
+                    <div className="ml-4 mt-1 border-l border-[#d9e2fd]/15 pl-2">
                       <HrmsLink label="Employee Profile Management" href="/employee-profile" />
                       <PlannedD3Item label="Fingerprint Attendance Integration" />
                       <HrmsLink label="Attendance History & Correction" href="/attendance" />
@@ -193,9 +193,19 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
 
         <div className="mt-auto space-y-3">
           <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-            <span className="grid size-7 place-items-center rounded-full bg-[#16834b] text-[10px] font-bold text-white">{account.initials}</span>
-            <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-white">{account.name}</p><p className="text-[10px] text-[#d9e2fc]/75">{account.role}</p></div>
-            <button type="button" onClick={() => void handleSignOut()} disabled={isSigningOut || isInternalSigningOut} className="rounded p-1.5 text-[#d9e2fc] transition hover:bg-white/10 disabled:opacity-50" aria-label="Logout" title="Logout"><LogOut size={16} /></button>
+            {/* <span className="grid size-7 place-items-center rounded-full bg-[#16834b] text-[10px] font-bold text-white">{account.initials}</span> */}
+            {/* <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-white">{account.name}</p><p className="text-[10px] text-[#d9e2fc]/75">{account.role}</p></div> */}
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              disabled={isSigningOut || isInternalSigningOut}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-red-600 px-3 py-1.5 text-red-500 transition hover:bg-red-500/10 disabled:opacity-50"
+              aria-label="Logout"
+              title="Logout"
+            >
+              {/* <LogOut size={16} /> */}
+              <span className="text-sm font-bold text-align-center">Logout</span>
+            </button>
           </div>
         </div>
       </aside>
