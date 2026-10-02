@@ -2,9 +2,11 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import Logo from "@/components/image/Logo.png";
 import {
   BriefcaseBusiness,
   ChevronDown,
@@ -19,6 +21,9 @@ import {
   ShieldCheck,
   UsersRound,
   X,
+  SquareTerminal,
+  Users
+
 } from "lucide-react";
 
 type SidebarProps = {
@@ -191,7 +196,9 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
         }`}
       >
         <div className="flex items-center gap-3 px-2">
-          <div className="grid size-9 place-items-center rounded-lg bg-[#069494] shadow-sm"><BriefcaseBusiness size={19} className="text-white" /></div>
+          <div>
+            <Image src={Logo} alt="ANDIMA logo" width={40} height={40} className="h-9 w-9 " priority />
+          </div>
           <div><p className="text-xl font-bold tracking-[-0.5px] text-white">ANDIMA</p><p className="text-xs text-[#d9e2fc]/80">Logistics Suite</p></div>
           <button type="button" onClick={() => setIsSidebarOpen(false)} className="ml-auto rounded p-1 text-[#d9e2fc] lg:hidden" aria-label="Tutup navigasi"><X size={18} /></button>
         </div>
@@ -203,10 +210,35 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
           <div>
             <button
               type="button"
-              onClick={() => setIsHrmsOpen((value) => !value)}
-              className="flex w-full items-center justify-between rounded-lg bg-[#069494] px-3 py-2.5 text-white shadow-sm"
+              // onClick={() => setIsHrmsOpen((value) => !value)}
+              className="flex w-full items-center justify-between rounded-lg mb-2 px-3 py-2.5 text-white shadow-sm"
             >
-              <span className="flex items-center gap-3"><ClipboardList size={17} /> HRMS</span>
+              <span className="flex items-center gap-3"><LayoutDashboard  size={17} /> Dashboard</span>
+              {/* <ChevronDown size={16} className={`transition-transform ${isHrmsOpen ? "rotate-0" : "-rotate-90"}`} /> */}
+            </button>
+            <button
+              type="button"
+              // onClick={() => setIsHrmsOpen((value) => !value)}
+              className="flex w-full items-center justify-between rounded-lg  mb-2 px-3 py-2.5 text-white shadow-sm"
+            >
+              <span className="flex items-center gap-3"><X size={17} /> CCR</span>
+              <ChevronDown size={16} className={`transition-transform -rotate-90`} />
+            </button>
+            <button
+              type="button"
+              // onClick={() => setIsHrmsOpen((value) => !value)}
+              className="flex w-full items-center justify-between rounded-lg  mb-2 px-3 py-2.5 text-white shadow-sm"
+            >
+              <span className="flex items-center gap-3"><X size={17} /> CRM</span>
+              <ChevronDown size={16} className={`transition-transform -rotate-90`} />
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setIsHrmsOpen((value) => !value)}
+              className="flex w-full items-center justify-between rounded-lg bg-[#0550D7] mb-2 px-3 py-2.5 text-white shadow-sm"
+            >
+              <span className="flex items-center gap-3"><Users  size={17} /> HRMS</span>
               <ChevronDown size={16} className={`transition-transform ${isHrmsOpen ? "rotate-0" : "-rotate-90"}`} />
             </button>
             {isHrmsOpen && (
@@ -262,19 +294,31 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
 
                   
                 </div>
+                
               </div>
+
+              
+              
             )}
+            <button
+              type="button"
+              // onClick={() => setIsHrmsOpen((value) => !value)}
+              className="flex w-full items-center justify-between rounded-lg mb-2 px-3 py-2.5 text-white shadow-sm"
+            >
+              <span className="flex items-center gap-3"><SquareTerminal size={17} /> MID</span>
+              <ChevronDown size={16} className={`transition-transform -rotate-90`} />
+            </button>
           </div>
           {/* <NavigationItem icon={<ShieldCheck size={16} />} label="MID" suffix={<ChevronRight size={15} />} /> */}
         </nav>
 
         <div className="mt-auto space-y-3">
           {/* <div className="rounded-lg border border-[#d9e2fc]/15 bg-[#1e3765] p-3"><div className="flex items-center gap-2 text-[11px] font-semibold text-white"><CircleHelp size={14} className="text-[#77d8cd]" /> Customer Support</div><p className="mt-1 text-[10px] text-[#d9e2fc]/80">24/7 Operations Line</p></div> */}
-          <NavigationItem icon={<Settings size={15} />} label="Settings" />
-          <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-            <span className="grid size-7 place-items-center rounded-full bg-[#16834b] text-[10px] font-bold text-white">{account.initials}</span>
-            <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-white">{account.name}</p><p className="text-[10px] text-[#d9e2fc]/75">{account.role}</p></div>
-            <button type="button" onClick={() => void handleSignOut()} disabled={isSigningOut || isInternalSigningOut} className="rounded p-1.5 text-[#d9e2fc] transition hover:bg-white/10 disabled:opacity-50" aria-label="Logout" title="Logout"><LogOut size={16} /></button>
+          {/* <NavigationItem icon={<Settings size={15} />} label="Settings" /> */}
+          <div className="flex items-center gap-2 rounded-[100px] px-2 py-1.5 border  border-[#D9364F] border-4 text-xs font-semibold text-white justify-center ">
+            {/* <span className="grid size-7 place-items-center rounded-full bg-[#16834b] text-[10px] font-bold text-white">{account.initials}</span> */}
+            {/* <p className="truncate text-xs font-bold text-white">LOGOUT</p> */}
+            <button type="button" onClick={() => void handleSignOut()} disabled={isSigningOut || isInternalSigningOut} className="rounded p-1.5 text-[#D9364F] transition hover:bg-white/10 disabled:opacity-50" aria-label="Logout" title="Logout">LOGOUT</button>
           </div>
         </div>
       </aside>
