@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../modules/d4/web/d4-theme.css";
 
 :root {
   --background: #ffffff;
