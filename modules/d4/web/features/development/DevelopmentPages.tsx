@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, History, Plus, RefreshCw } from "lucide-react";
+import { Eye, GraduationCap, History, Plus, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { DevelopmentNeedVersion, DevelopmentSourceType } from "../../../development/types";
 import { useSnapshot } from "../../data/D4DataProvider";
@@ -10,6 +10,7 @@ import { FilterBar, SearchInput, SelectFilter } from "../../ui/forms";
 import { DetailHeader, NotFound, PageHeader, Timeline } from "../../ui/layout";
 import { RowActionMenu } from "../../ui/RowActionMenu";
 import { Button, ButtonLink, Card, InfoGrid, Notice, SourceChip, StatusBadge } from "../../ui/primitives";
+import { TrainingFormModal } from "../training/TrainingModals";
 import { DevelopmentFormModal, DevelopmentStatusModal } from "./DevelopmentModals";
 
 export function DevelopmentListPage() {
@@ -21,6 +22,7 @@ export function DevelopmentListPage() {
   const [period, setPeriod] = useState("");
   const [adding, setAdding] = useState(false);
   const [statusFor, setStatusFor] = useState<string | null>(null);
+  const [trainingFor, setTrainingFor] = useState<DevelopmentNeedVersion | null>(null);
   // FR-04.8: filter by employee, source, period (month the requirement was last recorded) and status.
   const periods = useMemo(() => [...new Set(developmentNeeds(snapshot).map((need) => need.createdAt.slice(0, 7)))].sort().reverse(), [snapshot]);
   const rows = useMemo(() => {
@@ -54,10 +56,12 @@ export function DevelopmentListPage() {
       actions={(row) => <RowActionMenu label={`Aksi untuk ${row.objective}`} actions={[
         { label: "View Detail", icon: <Eye />, href: `/development/${row.needId}` },
         { label: "View History", icon: <History />, href: `/development/${row.needId}/history` },
+        { label: "Create Training", icon: <GraduationCap />, onSelect: () => setTrainingFor(row), hidden: !writer || row.status === "Completed" },
         { label: "Update Status", icon: <RefreshCw />, onSelect: () => setStatusFor(row.needId), hidden: !writer },
       ]} />} />
     {adding && <DevelopmentFormModal onClose={() => setAdding(false)} />}
     {statusFor && <DevelopmentStatusModal needId={statusFor} onClose={() => setStatusFor(null)} />}
+    {trainingFor && <TrainingFormModal employeeId={trainingFor.employeeId} developmentNeedId={trainingFor.needId} onClose={() => setTrainingFor(null)} />}
   </>;
 }
 
@@ -65,6 +69,7 @@ export function DevelopmentDetailPage({ needId }: { needId: string }) {
   const snapshot = useSnapshot();
   const writer = canWrite(snapshot);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [trainingOpen, setTrainingOpen] = useState(false);
   const need = developmentById(snapshot, needId);
   const employee = need && employeeById(snapshot, need.employeeId);
   if (!need || !employee || !visibleEmployees(snapshot).some((item) => item.id === employee.id)) return <NotFound what="Development requirement" backHref="/development" backLabel="Kembali ke Development Requirement" />;
@@ -78,6 +83,7 @@ export function DevelopmentDetailPage({ needId }: { needId: string }) {
         <ButtonLink href={`/development/${need.needId}/history`} icon={<History className="size-4" />}>View History</ButtonLink>
         {writer && <Button variant="secondary" icon={<RefreshCw className="size-4" />} onClick={() => setStatusOpen(true)}>Update Status</Button>}
         {/* A completed requirement cannot take new training (assertNeedOpen). */}
+        {writer && need.status !== "Completed" && <Button icon={<GraduationCap className="size-4" />} onClick={() => setTrainingOpen(true)}>Create Training</Button>}
       </>} />
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
       <Card title="Requirement">
@@ -106,6 +112,7 @@ export function DevelopmentDetailPage({ needId }: { needId: string }) {
     </div>
     <Notice>Status development atau training yang selesai tidak menutup competency gap secara otomatis; reassessment tetap dilakukan manusia.</Notice>
     {statusOpen && <DevelopmentStatusModal needId={need.needId} onClose={() => setStatusOpen(false)} />}
+    {trainingOpen && <TrainingFormModal employeeId={need.employeeId} developmentNeedId={need.needId} onClose={() => setTrainingOpen(false)} />}
   </>;
 }
 
