@@ -1,0 +1,61 @@
+/*
+ * D4 V2 design tokens (Performance & Training Development). Imported once from app/globals.css so the
+ * D4 utility classes (bg-app, text-ink-3, bg-nav, ...) exist. Values mirror the "D4 V2 Tokens" collection
+ * in Figma. Only new token names are added; the shared font and body styles stay untouched, the D4 font is
+ * applied to D4 routes through the .d4-root class below.
+ */
+@theme {
+  /* Sidebar follows the shared "GENERAL SIDEBAR" (PISD page A, node 2469:1744). */
+  --color-nav: #0f2342;
+  --color-nav-2: #1e3765;
+  --color-nav-text: #cbd5e1;
+  --color-nav-label: #94a3b8;
+  --color-nav-active: #2563eb;
+
+  --color-primary-50: #f1f3ff;
+  --color-primary-100: #d9e2fc;
+  --color-primary-500: #3b6ff5;
+  --color-primary-600: #155dfc;
+  --color-primary-700: #0550d7;
+
+  --color-app: #f8f9fc;
+  --color-surface: #ffffff;
+  --color-muted: #f1f5f9;
+
+  --color-ink: #0f172b;
+  --color-ink-2: #45556c;
+  --color-ink-3: #64748b;
+
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+
+  --color-success: #16a37a;
+  --color-success-bg: #e7f7f1;
+  --color-warning: #b57f0f;
+  --color-warning-bg: #fdf4e3;
+  --color-danger: #d9364f;
+  --color-danger-bg: #fcebee;
+  --color-info: #3b6ff5;
+  --color-info-bg: #eaf0ff;
+  --color-neutral: #64748b;
+  --color-neutral-bg: #f1f5f9;
+  --color-teal: #069494;
+  /* D3 avatar accent: employee initials on green, signed-in user on mint. */
+  --color-avatar: #16a37a;
+  --color-avatar-me-bg: #b4f9ca;
+  --color-avatar-me: #0b6b4f;
+  --color-people: #c94fea;
+
+  --font-display: var(--font-montserrat), var(--font-inter), ui-sans-serif, sans-serif;
+
+  --shadow-card: 0 8px 24px rgb(21 93 252 / 0.08);
+  --shadow-modal: 0 24px 48px rgb(15 23 43 / 0.2);
+}
+
+/* D4 routes and the dialogs/menus they portal into <body> while a D4 page is open. */
+.d4-root,
+body.d4-body {
+  background: var(--color-app);
+  color: var(--color-ink);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
