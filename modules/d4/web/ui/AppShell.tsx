@@ -15,6 +15,7 @@ export const D4_MENU = [
   { href: "/competency", label: "Competency Gap" },
   { href: "/development", label: "Development Requirement" },
   { href: "/training", label: "Training Tracking" },
+  { href: "/dashboard", label: "People Dashboard" },
 ] as const;
 
 const roleLabel: Record<string, string> = { HR: "HR", MANAGER: "Manager", EMPLOYEE: "Employee" };
