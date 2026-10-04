@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft, Eye, History, Save } from "lucide-react";
+import { ArrowRightLeft, Eye, FilePlus2, History, Save } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import type { CompetencyFinding, CompetencyOverallStatus } from "../../../competency/types";
 import type { EmployeeReference } from "../../../shared/types";
@@ -12,6 +12,7 @@ import { FilterBar, FormError, FormModal, ModalActions, SearchInput, SelectField
 import { DetailHeader, NotFound, PageHeader, Timeline } from "../../ui/layout";
 import { RowActionMenu } from "../../ui/RowActionMenu";
 import { Button, ButtonLink, Card, cx, Notice, SourceChip, statusLabel, StatusBadge } from "../../ui/primitives";
+import { DevelopmentFormModal } from "../development/DevelopmentModals";
 
 type Row = { employee: EmployeeReference; position: string; status: CompetencyOverallStatus | "Belum Ada Posisi"; findings: CompetencyFinding[]; lastAssessed?: string };
 
@@ -38,6 +39,7 @@ export function CompetencyListPage() {
   const [search, setSearch] = useState("");
   const [position, setPosition] = useState("");
   const [status, setStatus] = useState("");
+  const [devFor, setDevFor] = useState<string | null>(null);
   const rows = useMemo<Row[]>(() => visibleEmployees(snapshot).map((employee) => {
     const gap = currentGap(snapshot, employee);
     const saved = snapshot.competency.filter((item) => item.employeeId === employee.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
@@ -66,7 +68,10 @@ export function CompetencyListPage() {
       actions={(row) => <RowActionMenu label={`Aksi untuk ${row.employee.fullName}`} actions={[
         { label: "View Detail", icon: <Eye />, href: `/competency/${row.employee.id}` },
         { label: "View History", icon: <History />, href: `/competency/${row.employee.id}/history` },
+        { label: "Create Development Requirement", icon: <FilePlus2 />, onSelect: () => setDevFor(row.employee.id),
+          hidden: !writer || row.status !== "Gap" || row.findings.filter((item) => item.status === "Gap").every((item) => openNeedFor(allNeeds, row.employee.id, "competency_gap", item.requirementId)) },
       ]} />} />
+    {devFor && <DevelopmentFormModal employeeId={devFor} sourceType="competency_gap" onClose={() => setDevFor(null)} />}
   </>;
 }
 
@@ -100,6 +105,7 @@ export function CompetencyDetailPage({ employeeId }: { employeeId: string }) {
   const snapshot = useSnapshot();
   const { run, busy } = useD4();
   const writer = canWrite(snapshot);
+  const [devRef, setDevRef] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
   const employee = employeeById(snapshot, employeeId);
   if (!employee || !visibleEmployees(snapshot).some((item) => item.id === employeeId)) return <NotFound what="Employee" backHref="/competency" backLabel="Kembali ke Competency Gap" />;
@@ -132,13 +138,15 @@ export function CompetencyDetailPage({ employeeId }: { employeeId: string }) {
               <td className="px-5 py-3"><GapDelta finding={finding} /></td>
               <td className="max-w-[280px] px-5 py-3 text-ink-2">{finding.evidenceNotes?.trim() || "Belum ada evidence"}</td>
               <td className="px-5 py-3"><StatusBadge status={finding.status} /></td>
-              <td className="px-5 py-3 text-right">{linked && (open || finding.status !== "Gap" || !writer) ? <SourceChip label="Development" reference={linked.status} href={`/development/${linked.needId}`} /> : "—"}</td>
+              <td className="px-5 py-3 text-right">{linked && (open || finding.status !== "Gap" || !writer) ? <SourceChip label="Development" reference={linked.status} href={`/development/${linked.needId}`} />
+                : finding.status === "Gap" && writer ? <Button variant="ghost" className="h-9" icon={<FilePlus2 className="size-4" />} onClick={() => setDevRef(finding.requirementId)}>Create Development Requirement</Button> : "—"}</td>
             </tr>;
           })}</tbody>
         </table>
         {!gap?.findings.length && <p className="px-5 py-10 text-center text-sm text-ink-3">{gap ? "Position ini belum memiliki requirement kompetensi." : "Employee belum memiliki position aktif."}</p>}
       </div>
     </Card>
+    {devRef && <DevelopmentFormModal employeeId={employee.id} sourceType="competency_gap" sourceRef={devRef} onClose={() => setDevRef(null)} />}
     {changing && <PositionChangeModal employee={employee} onClose={() => setChanging(false)} />}
   </>;
 }
