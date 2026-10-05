@@ -50,7 +50,7 @@ const initialFormState: EmployeeFormState = {
 };
 
 function fieldClassName(hasError: boolean) {
-  return `mt-1.5 w-full rounded-lg border bg-white px-3 py-2 text-sm text-[#121B2E] outline-none transition focus:ring-1 ${
+  return `mt-2 h-11 w-full rounded-[15px] border bg-[#155DFC]/10 px-3.5 text-sm font-medium text-[#121B2E] outline-none transition focus:bg-white focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 ${
     hasError
       ? "border-red-500 focus:border-red-600 focus:ring-red-600"
       : "border-[#D9E2FC] focus:border-[#1E3765] focus:ring-[#1E3765]"
@@ -109,7 +109,7 @@ export default function EmployeeCreateForm({ departments, positions }: EmployeeC
       const supabase = createClient();
       const employeeId = formData.employeeId.trim();
       const { error } = await supabase
-        .from("employees")
+        .from("d3_employee")
         .insert({
           employee_id: employeeId,
           full_name: formData.fullName.trim(),
@@ -158,152 +158,25 @@ export default function EmployeeCreateForm({ departments, positions }: EmployeeC
   };
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit} noValidate>
-      <fieldset disabled={isSubmitting} className="space-y-5">
-        <section className="rounded-xl border border-[#D9E2FC] bg-white p-5 shadow-[0_4px_16px_rgba(15,35,66,0.04)]">
-          <h2 className="text-base font-bold text-[#121B2E]">Employee Information</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">
-              Employee ID
-              <input
-                className={fieldClassName(Boolean(errorMessage && !formData.employeeId.trim()))}
-                value={formData.employeeId}
-                onChange={(event) => updateField("employeeId", event.target.value)}
-                required
-              />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Employee Name
-              <input
-                className={fieldClassName(Boolean(errorMessage && !formData.fullName.trim()))}
-                value={formData.fullName}
-                onChange={(event) => updateField("fullName", event.target.value)}
-                required
-              />
-            </label>
+    <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+      <fieldset disabled={isSubmitting}>
+        <section className="rounded-[18px] border border-[#1E3765]/55 bg-white p-5 shadow-[3px_3px_20px_rgba(87,138,252,0.24)] sm:p-7">
+          <div className="flex flex-col gap-1 border-b border-[#D9E2FC] pb-5">
+            <h2 className="text-xl font-extrabold tracking-tight text-[#121B2E]">Employee Information</h2>
+            <p className="text-sm text-slate-500">Fields marked <span className="font-bold text-[#E5484D]">*</span> are required.</p>
           </div>
-        </section>
-
-        <section className="rounded-xl border border-[#D9E2FC] bg-white p-5 shadow-[0_4px_16px_rgba(15,35,66,0.04)]">
-          <h2 className="text-base font-bold text-[#121B2E]">Contact &amp; Identity Information</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">
-              Email
-              <input
-                className={fieldClassName(Boolean(errorMessage && !formData.email.trim()))}
-                type="email"
-                value={formData.email}
-                onChange={(event) => updateField("email", event.target.value)}
-                required
-              />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Phone Number
-              <input
-                className={fieldClassName(false)}
-                type="tel"
-                value={formData.phone}
-                onChange={(event) => updateField("phone", event.target.value)}
-              />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Identity Type
-              <input
-                className={fieldClassName(false)}
-                value={formData.identityType}
-                onChange={(event) => updateField("identityType", event.target.value)}
-              />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Identity Number
-              <input
-                className={fieldClassName(false)}
-                value={formData.identityNumber}
-                onChange={(event) => updateField("identityNumber", event.target.value)}
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-[#D9E2FC] bg-white p-5 shadow-[0_4px_16px_rgba(15,35,66,0.04)]">
-          <h2 className="text-base font-bold text-[#121B2E]">Employment Information</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">
-              Join Date
-              <input
-                className={fieldClassName(Boolean(errorMessage && !formData.join_date))}
-                type="date"
-                name="join_date"
-                value={formData.join_date}
-                onChange={(event) => updateField("join_date", event.target.value)}
-                required
-              />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Employment Status
-              <select
-                className={fieldClassName(Boolean(errorMessage && !formData.employmentStatus))}
-                value={formData.employmentStatus}
-                onChange={(event) => updateField("employmentStatus", event.target.value as EmploymentStatus | "")}
-                required
-              >
-                <option value="">Pilih status</option>
-                {employmentStatuses.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Department
-              <select
-                className={fieldClassName(Boolean(errorMessage && !formData.departmentId))}
-                value={formData.departmentId}
-                onChange={(event) => {
-                  const departmentId = event.target.value;
-                  setFormData((current) => ({
-                    ...current,
-                    departmentId,
-                    positionId: current.positionId && positions.find((position) => position.id === current.positionId)?.department_id === departmentId
-                      ? current.positionId
-                      : "",
-                  }));
-                }}
-                required
-              >
-                <option value="">Pilih department</option>
-                {departments.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name} ({department.code})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Position
-              <select
-                className={fieldClassName(Boolean(errorMessage && !formData.positionId))}
-                value={formData.positionId}
-                onChange={(event) => updateField("positionId", event.target.value)}
-                disabled={!formData.departmentId}
-                required
-              >
-                <option value="">{formData.departmentId ? "Pilih position" : "Pilih department terlebih dahulu"}</option>
-                {availablePositions.map((position) => (
-                  <option key={position.id} value={position.id}>
-                    {position.title} ({position.code})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700 md:col-span-2">
-              Work Location
-              <input
-                className={fieldClassName(Boolean(errorMessage && !formData.workLocation.trim()))}
-                value={formData.workLocation}
-                onChange={(event) => updateField("workLocation", event.target.value)}
-                required
-              />
-            </label>
+          <div className="mt-6 grid gap-x-6 gap-y-5 md:grid-cols-2">
+            <label className="text-sm font-semibold text-[#121B2E]">Employee Name <span className="text-[#E5484D]">*</span><input className={fieldClassName(Boolean(errorMessage && !formData.fullName.trim()))} value={formData.fullName} onChange={(event) => updateField("fullName", event.target.value)} required /></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Employee ID <span className="text-[#E5484D]">*</span><input className={fieldClassName(Boolean(errorMessage && !formData.employeeId.trim()))} value={formData.employeeId} onChange={(event) => updateField("employeeId", event.target.value)} required /></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Identity Number<input className={fieldClassName(false)} value={formData.identityNumber} onChange={(event) => updateField("identityNumber", event.target.value)} /></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Email <span className="text-[#E5484D]">*</span><input className={fieldClassName(Boolean(errorMessage && !formData.email.trim()))} type="email" value={formData.email} onChange={(event) => updateField("email", event.target.value)} required /></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Phone Number<input className={fieldClassName(false)} type="tel" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} /></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Identity Type<input className={fieldClassName(false)} value={formData.identityType} onChange={(event) => updateField("identityType", event.target.value)} /></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Join Date <span className="text-[#E5484D]">*</span><input className={fieldClassName(Boolean(errorMessage && !formData.join_date))} type="date" name="join_date" value={formData.join_date} onChange={(event) => updateField("join_date", event.target.value)} required /></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Employment Status <span className="text-[#E5484D]">*</span><select className={fieldClassName(Boolean(errorMessage && !formData.employmentStatus))} value={formData.employmentStatus} onChange={(event) => updateField("employmentStatus", event.target.value as EmploymentStatus | "")} required><option value="">Pilih status</option>{employmentStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Department <span className="text-[#E5484D]">*</span><select className={fieldClassName(Boolean(errorMessage && !formData.departmentId))} value={formData.departmentId} onChange={(event) => { const departmentId = event.target.value; setFormData((current) => ({ ...current, departmentId, positionId: current.positionId && positions.find((position) => position.id === current.positionId)?.department_id === departmentId ? current.positionId : "" })); }} required><option value="">Pilih department</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name} ({department.code})</option>)}</select></label>
+            <label className="text-sm font-semibold text-[#121B2E]">Work Location <span className="text-[#E5484D]">*</span><input className={fieldClassName(Boolean(errorMessage && !formData.workLocation.trim()))} value={formData.workLocation} onChange={(event) => updateField("workLocation", event.target.value)} required /></label>
+            <label className="text-sm font-semibold text-[#121B2E] md:col-span-2">Position <span className="text-[#E5484D]">*</span><select className={fieldClassName(Boolean(errorMessage && !formData.positionId))} value={formData.positionId} onChange={(event) => updateField("positionId", event.target.value)} disabled={!formData.departmentId} required><option value="">{formData.departmentId ? "Pilih position" : "Pilih department terlebih dahulu"}</option>{availablePositions.map((position) => <option key={position.id} value={position.id}>{position.title} ({position.code})</option>)}</select></label>
           </div>
         </section>
       </fieldset>
@@ -319,9 +192,9 @@ export default function EmployeeCreateForm({ departments, positions }: EmployeeC
         </p>
       )}
 
-      <div className="flex flex-col-reverse gap-3 border-t border-[#D9E2FC] pt-5 sm:flex-row sm:justify-end">
+      <div className="flex flex-col-reverse gap-3 border-t border-[#D9E2FC] pt-6 sm:flex-row sm:justify-end">
         <Link
-          className="inline-flex h-10 items-center justify-center rounded-lg border border-[#1E3765] bg-white px-4 text-sm font-bold text-[#1E3765] transition hover:bg-[#F2F5FB]"
+          className="inline-flex h-11 items-center justify-center rounded-[15px] border border-[#155DFC] bg-[#EEF4FF] px-5 text-sm font-bold text-[#155DFC] transition hover:bg-[#DCE8FF]"
           href="/employees"
         >
           Cancel
