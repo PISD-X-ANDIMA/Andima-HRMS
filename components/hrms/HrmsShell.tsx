@@ -5,9 +5,10 @@ interface HrmsShellProps {
   children: React.ReactNode;
   userEmail?: string;
   userRole?: D3AppRole | null;
+  contentClassName?: string;
 }
 
-export default function HrmsShell({ children, userEmail, userRole }: HrmsShellProps) {
+export default function HrmsShell({ children, userEmail, userRole, contentClassName }: HrmsShellProps) {
   // AppShell already owns the shared sidebar and header region for every D3 route.
   // Keep this wrapper so the imported D3-001 pages retain their original content.
   void userEmail;
@@ -21,7 +22,7 @@ export default function HrmsShell({ children, userEmail, userRole }: HrmsShellPr
           <HeaderAccount />
         </div>
       </header>
-      <main className="px-5 py-7 lg:px-8 lg:py-8">{children}</main>
+      <main className={contentClassName ?? "px-5 py-7 lg:px-8 lg:py-8"}>{children}</main>
     </div>
   );
 }

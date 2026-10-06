@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Supabase CLI cache
+/supabase/.temp
+
+# Replaced local Face API model download; not used by the Human biometric flow.
+/public/face-api-models/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -53,7 +53,7 @@ export default function HrmsSidebar({ userEmail }: HrmsSidebarProps) {
           <div className="ml-4 space-y-1 pt-1">
             <InactiveMenuItem icon={CalendarDays}>Attendance History</InactiveMenuItem>
             <InactiveMenuItem icon={BarChart3}>Attendance &amp; Productivity</InactiveMenuItem>
-            <InactiveMenuItem icon={MessageSquareHeart}>Feedback &amp; Reward</InactiveMenuItem>
+            <Link href="/feedback-reward" className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[#D9E2FC]/80 transition hover:bg-[#1E3765] hover:text-white"><MessageSquareHeart className="size-4" strokeWidth={1.8} />Feedback &amp; Reward</Link>
             <InactiveMenuItem icon={FileText}>Report &amp; Ticket</InactiveMenuItem>
           </div>
         </div>

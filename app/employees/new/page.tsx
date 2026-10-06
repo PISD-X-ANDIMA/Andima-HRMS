@@ -61,20 +61,11 @@ export default async function NewEmployeePage() {
 
   return (
     <HrmsShell userEmail={user.email} userRole={userRole}>
-      <section className="mx-auto max-w-6xl space-y-7">
-        <Link className="inline-flex text-sm font-semibold text-[#1E3765] hover:text-[#155DFC]" href="/employees">← Employee Directory</Link>
-
-        <header>
-          <p className="text-xs font-bold tracking-[0.16em] text-[#1E3765]">EMPLOYEE MANAGEMENT</p>
-          <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Add a New Employee</h1>
-          <p className="mt-3 text-base text-slate-600">Fill in all required fields to create a new employee profile.</p>
-        </header>
-
-        <EmployeeCreateForm
-          departments={departmentsResult.data ?? []}
-          positions={positionsResult.data ?? []}
-        />
-      </section>
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#121B2E]/55 p-3 sm:p-6">
+        <section className="my-auto w-full max-w-[1185px] rounded-[15px] bg-white p-5 shadow-[4px_4px_10px_rgba(21,93,252,0.5)] sm:p-9">
+          <EmployeeCreateForm departments={departmentsResult.data ?? []} positions={positionsResult.data ?? []} />
+        </section>
+      </div>
     </HrmsShell>
   );
 }

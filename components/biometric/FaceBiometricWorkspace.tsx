@@ -1,17 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertCircle,
-  Check,
   CheckCircle2,
   CircleAlert,
   Clock3,
   Eye,
   LoaderCircle,
-  UserRoundCheck,
   Video,
   VideoOff,
 } from "lucide-react";
@@ -29,7 +26,6 @@ type HumanFace = {
   boxScore?: number;
   faceScore?: number;
   live?: number;
-  real?: number;
   box?: [number, number, number, number];
   mesh?: FaceMeshPoint[];
   rotation?: { angle: { yaw: number; pitch: number } } | null;
@@ -43,14 +39,18 @@ type HumanResult = {
 type HumanInstance = {
   version: string;
   load: () => Promise<void>;
+  warmup?: () => Promise<unknown>;
   detect: (input: HTMLVideoElement) => Promise<HumanResult>;
 };
+
+type CapturedFaceSample = { blob: Blob; descriptor: number[] };
 
 type FaceTemplate = {
   descriptors: number[][];
   createdAt: string;
   modelVersion: string;
-  embeddingModel: "insightface-mobilenet-swish";
+  embeddingModel: "insightface-mobilenet-swish" | "face-api-js-face-recognition-net";
+  samplePaths: string[];
 };
 
 type DailyAttendance = {
@@ -62,15 +62,19 @@ type DailyAttendance = {
 // Cosine similarity for the InsightFace embedding. This is a provisional
 // security threshold and must be calibrated with genuine and impostor tests.
 const MIN_IDENTITY_SIMILARITY = 0.7;
-const REQUIRED_STABLE_MATCHES = 8;
-const REQUIRED_MISMATCH_FRAMES = 3;
-const SIMILARITY_WINDOW_SIZE = 10;
-const IDENTITY_RESET_MARGIN = 0.12;
-const MIN_FACE_SIZE_PX = 180;
+const FAST_IDENTITY_SIMILARITY = 0.82;
+const REQUIRED_STABLE_MATCHES = 5;
+const FAST_REQUIRED_STABLE_MATCHES = 3;
+const SIMILARITY_WINDOW_SIZE = 5;
 const CHALLENGE_HOLD_DURATION_MS = 450;
 const BLINK_CONFIRMATION_FRAMES = 2;
-const ENROLLMENT_SAMPLE_INTERVAL_MS = 350;
-const REQUIRED_ENROLLMENT_SAMPLES = 15;
+const ENROLLMENT_CENTER_HOLD_MS = 1500;
+const FACE_SAMPLE_CAPTURE_INTERVAL_MS = 1000;
+const REQUIRED_FACE_SAMPLES = 5;
+const TEMPLATE_TOP_MATCHES = 5;
+const REQUIRED_LIVENESS_CHALLENGES = 3;
+const MIN_ENROLLMENT_SAMPLE_SIMILARITY = 0.82;
+const ATTENDANCE_VERIFICATION_TIMEOUT_MS = 15000;
 
 const challengeDetails: Record<ChallengeId, { label: string; helper: string }> = {
   left: { label: "Hadap kiri", helper: "Putar wajah sedikit ke kiri." },
@@ -86,8 +90,8 @@ const challengeDetails: Record<ChallengeId, { label: string; helper: string }> =
 const degreesToRadians = (degrees: number) => degrees * (Math.PI / 180);
 const CENTER_YAW_THRESHOLD = degreesToRadians(10);
 const CENTER_PITCH_THRESHOLD = degreesToRadians(10);
-const TURN_YAW_THRESHOLD = degreesToRadians(15);
-const TILT_PITCH_THRESHOLD = degreesToRadians(12);
+const TURN_YAW_THRESHOLD = degreesToRadians(12);
+const TILT_PITCH_THRESHOLD = degreesToRadians(10);
 
 const FACE_OVERLAY_PATHS = [
   [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10],
@@ -103,14 +107,7 @@ function shuffleChallenges() {
     const target = Math.floor(Math.random() * (index + 1));
     [values[index], values[target]] = [values[target], values[index]];
   }
-  return values;
-}
-
-function formatTime(timestamp: string) {
-  return new Intl.DateTimeFormat("id-ID", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(timestamp));
+  return values.slice(0, REQUIRED_LIVENESS_CHALLENGES);
 }
 
 function getJakartaDate(timestamp = new Date()) {
@@ -122,12 +119,6 @@ function getJakartaDate(timestamp = new Date()) {
   }).formatToParts(timestamp);
   const part = (type: Intl.DateTimeFormatPartTypes) => values.find((value) => value.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
-}
-
-function livenessLabel(value: number | undefined) {
-  if (typeof value !== "number") return "Menunggu pembacaan";
-  if (value >= 0.6) return "Terdeteksi hidup";
-  return "Perlu pencahayaan lebih baik";
 }
 
 function cosineSimilarity(first: number[], second: number[]) {
@@ -145,11 +136,18 @@ function cosineSimilarity(first: number[], second: number[]) {
 }
 
 function templateSimilarity(embedding: number[], descriptors: number[][]) {
-  if (descriptors.length === 0) return 0;
-  const averaged = Array.from({ length: embedding.length }, (_, index) => (
-    descriptors.reduce((total, descriptor) => total + (descriptor[index] ?? 0), 0) / descriptors.length
-  ));
-  return cosineSimilarity(embedding, averaged);
+  const scores = descriptors
+    .filter((descriptor) => descriptor.length === embedding.length)
+    .map((descriptor) => cosineSimilarity(embedding, descriptor))
+    .sort((first, second) => second - first);
+  if (scores.length === 0) return 0;
+
+  // A template may contain samples captured in more than one good-quality
+  // session. Averaging every descriptor lets an old camera, lighting, or pose
+  // outlier pull the entire reference down. Requiring the mean of the five
+  // closest stored samples remains stricter than accepting one best frame.
+  const nearest = scores.slice(0, Math.min(TEMPLATE_TOP_MATCHES, scores.length));
+  return nearest.reduce((total, score) => total + score, 0) / nearest.length;
 }
 
 function median(values: number[]) {
@@ -168,8 +166,10 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   const frameRef = useRef<number | null>(null);
   const isDetectingRef = useRef(false);
   const latestEmbeddingRef = useRef<number[] | null>(null);
-  const enrollmentSamplesRef = useRef<number[][]>([]);
-  const lastEnrollmentSampleAtRef = useRef(0);
+  const faceSamplePhotosRef = useRef<CapturedFaceSample[]>([]);
+  const faceSampleCapturePendingRef = useRef(false);
+  const lastFaceSampleCaptureAtRef = useRef(0);
+  const facingCenterSinceRef = useRef<number | null>(null);
   const lastMeshRenderAtRef = useRef(0);
   const challengeOrderRef = useRef<ChallengeId[]>([]);
   const completedChallengesRef = useRef<ChallengeId[]>([]);
@@ -178,6 +178,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   const challengeFramesRef = useRef(0);
   const stableMatchFramesRef = useRef(0);
   const mismatchFramesRef = useRef(0);
+  const attendanceVerificationStartedAtRef = useRef<number | null>(null);
   const similarityWindowRef = useRef<number[]>([]);
   const identityVerifiedRef = useRef(false);
   const matchScoreRef = useRef<number | null>(null);
@@ -191,13 +192,11 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   const [faceCount, setFaceCount] = useState(0);
   const [faceConfidence, setFaceConfidence] = useState(0);
   const [livenessScore, setLivenessScore] = useState<number | undefined>();
-  const [antiSpoofScore, setAntiSpoofScore] = useState<number | undefined>();
   const [matchScore, setMatchScore] = useState<number | null>(null);
   const [stableMatchFrames, setStableMatchFrames] = useState(0);
   const [identityVerified, setIdentityVerified] = useState(false);
   const [attendancePresence, setAttendancePresence] = useState(false);
-  const [enrollmentSampleCount, setEnrollmentSampleCount] = useState(0);
-  const [faceSize, setFaceSize] = useState(0);
+  const [faceSampleCount, setFaceSampleCount] = useState(0);
   const [facingCenter, setFacingCenter] = useState(false);
   const [faceMesh, setFaceMesh] = useState<FaceMeshPoint[]>([]);
   const [videoDimensions, setVideoDimensions] = useState({ width: 640, height: 480 });
@@ -205,6 +204,9 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   const [actionMessage, setActionMessage] = useState("");
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string | null; employeeId: string } | null>(null);
   const [isResolvingSession, setIsResolvingSession] = useState(true);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [savingStage, setSavingStage] = useState("");
+  const [isAttendanceRejected, setIsAttendanceRejected] = useState(false);
 
   const isEnrollment = mode === "enrollment";
   const activeChallenge = challengeOrder.find((challenge) => !completedChallenges.includes(challenge));
@@ -212,15 +214,13 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   const matchPassed = isEnrollment || identityVerified;
   const qualityPassed = faceCount === 1
     && faceConfidence >= 60
-    && faceSize >= MIN_FACE_SIZE_PX
     && facingCenter
-    && (livenessScore ?? 0) >= 0.6
-    && (antiSpoofScore ?? 0) >= 0.6;
+    && (livenessScore ?? 0) >= 0.6;
   const canFinalize = scanState === "scanning"
     && allChallengesCompleted
     && hasEmbedding
     && matchPassed
-    && (isEnrollment ? qualityPassed && enrollmentSampleCount >= REQUIRED_ENROLLMENT_SAMPLES : attendancePresence);
+    && (isEnrollment ? qualityPassed && faceSampleCount >= REQUIRED_FACE_SAMPLES : attendancePresence);
 
   const stopCamera = useCallback(() => {
     if (frameRef.current !== null) {
@@ -233,25 +233,61 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
     isDetectingRef.current = false;
   }, []);
 
+  const captureFaceSample = useCallback((video: HTMLVideoElement, box: HumanFace["box"], descriptor: number[]) => {
+    if (!box || faceSampleCapturePendingRef.current || faceSamplePhotosRef.current.length >= REQUIRED_FACE_SAMPLES) return;
+    const now = Date.now();
+    if (now - lastFaceSampleCaptureAtRef.current < FACE_SAMPLE_CAPTURE_INTERVAL_MS) return;
+
+    // A registration template must represent one stable face. The first
+    // frame becomes the reference, then every later sample is accepted only
+    // when it closely matches the already accepted samples. This filters out
+    // temporary blur and pose changes without weakening attendance matching.
+    const acceptedDescriptors = faceSamplePhotosRef.current.map((sample) => sample.descriptor);
+    if (acceptedDescriptors.length > 0) {
+      const nearestSimilarities = acceptedDescriptors
+        .map((accepted) => cosineSimilarity(descriptor, accepted))
+        .sort((first, second) => second - first)
+        .slice(0, Math.min(2, acceptedDescriptors.length));
+      const consistency = nearestSimilarities.reduce((sum, value) => sum + value, 0) / nearestSimilarities.length;
+      if (consistency < MIN_ENROLLMENT_SAMPLE_SIMILARITY) return;
+    }
+
+    const [x, y, width, height] = box;
+    const sourceWidth = video.videoWidth || 640;
+    const sourceHeight = video.videoHeight || 480;
+    const side = Math.min(Math.max(width, height) * 1.75, sourceWidth, sourceHeight);
+    const sourceX = Math.max(0, Math.min(sourceWidth - side, x + width / 2 - side / 2));
+    const sourceY = Math.max(0, Math.min(sourceHeight - side, y + height / 2 - side / 2));
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 320;
+    canvas.getContext("2d")?.drawImage(video, sourceX, sourceY, side, side, 0, 0, 320, 320);
+
+    faceSampleCapturePendingRef.current = true;
+    lastFaceSampleCaptureAtRef.current = now;
+    canvas.toBlob((blob) => {
+      faceSampleCapturePendingRef.current = false;
+      if (!blob || faceSamplePhotosRef.current.length >= REQUIRED_FACE_SAMPLES) return;
+      faceSamplePhotosRef.current = [...faceSamplePhotosRef.current, { blob, descriptor: [...descriptor] }];
+      setFaceSampleCount(faceSamplePhotosRef.current.length);
+    }, "image/webp", 0.9);
+  }, []);
+
   const updateResult = useCallback((result: HumanResult) => {
+    const now = Date.now();
     const face = result.face[0];
     const gestureNames = result.gesture.map((entry) => String(entry.gesture));
     const yaw = face?.rotation?.angle.yaw ?? 0;
     const pitch = face?.rotation?.angle.pitch ?? 0;
-    const nextFaceSize = Math.min(face?.box?.[2] ?? 0, face?.box?.[3] ?? 0);
     const nextFaceConfidence = Math.round(((face?.faceScore ?? face?.boxScore ?? 0) * 100));
     const nextFacingCenter = gestureNames.includes("facing center") || (Math.abs(yaw) <= CENTER_YAW_THRESHOLD && Math.abs(pitch) <= CENTER_PITCH_THRESHOLD);
     const baseQualityPassed = result.face.length === 1
       && nextFaceConfidence >= 60
-      && nextFaceSize >= MIN_FACE_SIZE_PX
-      && (face?.live ?? 0) >= 0.6
-      && (face?.real ?? 0) >= 0.6;
+      && (face?.live ?? 0) >= 0.6;
     const nextQualityPassed = baseQualityPassed && nextFacingCenter;
     setFaceCount(result.face.length);
     setFaceConfidence(nextFaceConfidence);
     setLivenessScore(face?.live);
-    setAntiSpoofScore(face?.real);
-    setFaceSize(nextFaceSize);
     setFacingCenter(nextFacingCenter);
     if (Date.now() - lastMeshRenderAtRef.current >= 66) {
       setFaceMesh(face?.mesh ?? []);
@@ -262,17 +298,23 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
     setAttendancePresence(baseQualityPassed);
 
     if (result.face.length !== 1 || !face?.embedding) {
+      facingCenterSinceRef.current = null;
       latestEmbeddingRef.current = null;
       setHasEmbedding(false);
-      setMatchScore(null);
-      matchScoreRef.current = null;
-      stableMatchFramesRef.current = 0;
-      mismatchFramesRef.current = 0;
-      similarityWindowRef.current = [];
-      identityVerifiedRef.current = false;
+      if (!identityVerifiedRef.current) {
+        setMatchScore(null);
+        matchScoreRef.current = null;
+      }
+      if (!identityVerifiedRef.current) {
+        stableMatchFramesRef.current = 0;
+        mismatchFramesRef.current = 0;
+        similarityWindowRef.current = [];
+      }
       attendancePresenceRef.current = false;
-      setStableMatchFrames(0);
-      setIdentityVerified(false);
+      if (!identityVerifiedRef.current) {
+        setStableMatchFrames(0);
+        setIdentityVerified(false);
+      }
       setAttendancePresence(false);
       setFaceMesh([]);
       return;
@@ -281,52 +323,69 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
     latestEmbeddingRef.current = face.embedding;
     setHasEmbedding(true);
 
-    // Enrollment descriptors are deliberately taken only while the user faces
-    // the camera. Liveness poses prove presence, but should not become the
-    // reference identity used for normal, straight-on attendance.
+    if (baseQualityPassed && nextFacingCenter) {
+      facingCenterSinceRef.current ??= now;
+    } else {
+      facingCenterSinceRef.current = null;
+    }
+
+    const livenessFinished = challengeOrderRef.current.length > 0
+      && completedChallengesRef.current.length === challengeOrderRef.current.length;
+
+    const storedTemplate = templateRef.current;
+
+    // The five samples are captured automatically only after liveness has
+    // completed and the user has returned to a stable, forward-facing pose.
     if (
       isEnrollment
       && baseQualityPassed
       && nextFacingCenter
-      && enrollmentSamplesRef.current.length < REQUIRED_ENROLLMENT_SAMPLES
-      && Date.now() - lastEnrollmentSampleAtRef.current >= ENROLLMENT_SAMPLE_INTERVAL_MS
+      && livenessFinished
+      && facingCenterSinceRef.current !== null
+      && now - facingCenterSinceRef.current >= ENROLLMENT_CENTER_HOLD_MS
+      && faceSamplePhotosRef.current.length < REQUIRED_FACE_SAMPLES
     ) {
-      const nextSamples = [...enrollmentSamplesRef.current, face.embedding];
-      enrollmentSamplesRef.current = nextSamples;
-      lastEnrollmentSampleAtRef.current = Date.now();
-      setEnrollmentSampleCount(nextSamples.length);
+      const video = videoRef.current;
+      if (video) captureFaceSample(video, face.box, face.embedding);
     }
 
-    const storedTemplate = templateRef.current;
-    if (!isEnrollment && storedTemplate) {
+    if (!isEnrollment && storedTemplate?.embeddingModel === "face-api-js-face-recognition-net") {
+      setErrorMessage("Template lama perlu didaftarkan ulang agar cocok dengan mesin pengenalan wajah saat ini.");
+      setMatchScore(null);
+      identityVerifiedRef.current = false;
+      setIdentityVerified(false);
+    } else if (!isEnrollment && storedTemplate) {
       const rawSimilarity = templateSimilarity(face.embedding, storedTemplate.descriptors);
+      const verificationThreshold = MIN_IDENTITY_SIMILARITY;
+      const fastVerificationThreshold = FAST_IDENTITY_SIMILARITY;
       const similarityWindow = [...similarityWindowRef.current, rawSimilarity].slice(-SIMILARITY_WINDOW_SIZE);
       similarityWindowRef.current = similarityWindow;
       const smoothedSimilarity = median(similarityWindow);
 
-      if (!identityVerifiedRef.current) {
-        const verifiedFrame = nextQualityPassed && smoothedSimilarity >= MIN_IDENTITY_SIMILARITY;
+      const wasVerified = identityVerifiedRef.current;
+      if (!wasVerified) {
+        const verifiedFrame = nextQualityPassed && smoothedSimilarity >= verificationThreshold;
         stableMatchFramesRef.current = verifiedFrame
           ? Math.min(stableMatchFramesRef.current + 1, REQUIRED_STABLE_MATCHES)
           : 0;
-        identityVerifiedRef.current = stableMatchFramesRef.current >= REQUIRED_STABLE_MATCHES;
+        const requiredFrames = smoothedSimilarity >= fastVerificationThreshold
+          ? FAST_REQUIRED_STABLE_MATCHES
+          : REQUIRED_STABLE_MATCHES;
+        identityVerifiedRef.current = stableMatchFramesRef.current >= requiredFrames;
         mismatchFramesRef.current = 0;
-      } else if (rawSimilarity < MIN_IDENTITY_SIMILARITY - IDENTITY_RESET_MARGIN) {
-        mismatchFramesRef.current += 1;
-        if (mismatchFramesRef.current >= REQUIRED_MISMATCH_FRAMES) {
-          identityVerifiedRef.current = false;
-          stableMatchFramesRef.current = 0;
-          mismatchFramesRef.current = 0;
-          similarityWindowRef.current = [rawSimilarity];
-        }
       } else {
+        // Verification is intentionally locked for this scan after a stable
+        // match. A transient camera frame must not make a verified user start
+        // over; attendance still requires one live face at button press.
         mismatchFramesRef.current = 0;
       }
 
-      setMatchScore(Math.round(smoothedSimilarity * 100));
-      matchScoreRef.current = smoothedSimilarity;
-      setStableMatchFrames(stableMatchFramesRef.current);
-      setIdentityVerified(identityVerifiedRef.current);
+      if (!wasVerified) {
+        setMatchScore(Math.round(smoothedSimilarity * 100));
+        matchScoreRef.current = smoothedSimilarity;
+        setStableMatchFrames(stableMatchFramesRef.current);
+        setIdentityVerified(identityVerifiedRef.current);
+      }
     } else if (!isEnrollment) {
       setMatchScore(null);
       matchScoreRef.current = null;
@@ -336,6 +395,19 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
       identityVerifiedRef.current = false;
       setStableMatchFrames(0);
       setIdentityVerified(false);
+    }
+
+    if (!isEnrollment && livenessFinished && storedTemplate && !identityVerifiedRef.current) {
+      attendanceVerificationStartedAtRef.current ??= now;
+      if (now - attendanceVerificationStartedAtRef.current >= ATTENDANCE_VERIFICATION_TIMEOUT_MS) {
+        setErrorMessage("Wajah tidak terverifikasi untuk akun ini. Pemindaian dihentikan; coba kembali dengan pemilik akun.");
+        setIsAttendanceRejected(true);
+        setScanState("error");
+        stopCamera();
+        return;
+      }
+    } else if (!isEnrollment && identityVerifiedRef.current) {
+      attendanceVerificationStartedAtRef.current = null;
     }
 
     const target = challengeOrderRef.current.find((challenge) => !completedChallengesRef.current.includes(challenge));
@@ -388,13 +460,12 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
             : false;
     const detected = gestureDetected || rotationDetected;
 
-    // The final action still requires liveness/anti-spoof scores. During a
-    // head turn those scores can momentarily dip, so they must not freeze the
-    // visible liveness progress itself.
+    // Liveness challenges verify visible motion. During a head turn the model
+    // can briefly lose face detail, so challenge progress only requires a
+    // single detected face and sufficient detector confidence.
     const challengeCanBeCompleted = detected
       && result.face.length === 1
-      && nextFaceConfidence >= 60
-      && nextFaceSize >= MIN_FACE_SIZE_PX;
+      && nextFaceConfidence >= 60;
     let confirmedChallenge = false;
 
     if (!challengeCanBeCompleted) {
@@ -422,7 +493,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
         challengeFramesRef.current = 0;
       }
     }
-  }, [isEnrollment]);
+  }, [captureFaceSample, isEnrollment, stopCamera]);
 
   const startDetection = useCallback(() => {
     const loop = async () => {
@@ -449,6 +520,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   const startScan = useCallback(async () => {
     setErrorMessage("");
     setActionMessage("");
+    setIsAttendanceRejected(false);
     if (!currentUser) {
       setErrorMessage("Sesi akun tidak ditemukan. Silakan login kembali.");
       router.replace("/login");
@@ -462,25 +534,26 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
     setFaceCount(0);
     setFaceConfidence(0);
     setLivenessScore(undefined);
-    setAntiSpoofScore(undefined);
     setMatchScore(null);
     matchScoreRef.current = null;
     setStableMatchFrames(0);
     setIdentityVerified(false);
-    setEnrollmentSampleCount(0);
-    setFaceSize(0);
+    setFaceSampleCount(0);
     setFacingCenter(false);
     setFaceMesh([]);
     setHasEmbedding(false);
     latestEmbeddingRef.current = null;
-    enrollmentSamplesRef.current = [];
-    lastEnrollmentSampleAtRef.current = 0;
+    faceSamplePhotosRef.current = [];
+    faceSampleCapturePendingRef.current = false;
+    lastFaceSampleCaptureAtRef.current = 0;
+    facingCenterSinceRef.current = null;
     stableMatchFramesRef.current = 0;
     mismatchFramesRef.current = 0;
     similarityWindowRef.current = [];
     challengeStartedAtRef.current = null;
     challengeFramesRef.current = 0;
     horizontalCalibrationRef.current = null;
+    attendanceVerificationStartedAtRef.current = null;
     identityVerifiedRef.current = false;
     qualityPassedRef.current = false;
     attendancePresenceRef.current = false;
@@ -504,6 +577,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
         debug: false,
         cacheModels: true,
         modelBasePath: "https://vladmandic.github.io/human-models/models",
+          filter: { enabled: true, equalization: true },
         face: {
           enabled: true,
           detector: { enabled: true, rotation: true, maxDetected: 1, minConfidence: 0.6 },
@@ -516,7 +590,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
             skipFrames: 1,
             skipTime: 0,
           },
-          antispoof: { enabled: true },
+          antispoof: { enabled: false },
           liveness: { enabled: true },
         },
         gesture: { enabled: true },
@@ -539,7 +613,10 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
           height: videoRef.current.videoHeight || 480,
         });
       }
-      await human.load();
+      await Promise.all([
+        human.load(),
+        Promise.resolve(human.warmup?.()),
+      ]);
       setScanState("scanning");
       startDetection();
     } catch (error) {
@@ -555,6 +632,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   const resetScan = useCallback(() => {
     stopCamera();
     setScanState("idle");
+    setIsAttendanceRejected(false);
     challengeOrderRef.current = [];
     completedChallengesRef.current = [];
     setCompletedChallenges([]);
@@ -562,25 +640,26 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
     setFaceCount(0);
     setFaceConfidence(0);
     setLivenessScore(undefined);
-    setAntiSpoofScore(undefined);
     setMatchScore(null);
     matchScoreRef.current = null;
     setStableMatchFrames(0);
     setIdentityVerified(false);
-    setEnrollmentSampleCount(0);
-    setFaceSize(0);
+    setFaceSampleCount(0);
     setFacingCenter(false);
     setFaceMesh([]);
     setHasEmbedding(false);
     latestEmbeddingRef.current = null;
-    enrollmentSamplesRef.current = [];
-    lastEnrollmentSampleAtRef.current = 0;
+    faceSamplePhotosRef.current = [];
+    faceSampleCapturePendingRef.current = false;
+    lastFaceSampleCaptureAtRef.current = 0;
+    facingCenterSinceRef.current = null;
     stableMatchFramesRef.current = 0;
     mismatchFramesRef.current = 0;
     similarityWindowRef.current = [];
     challengeStartedAtRef.current = null;
     challengeFramesRef.current = 0;
     horizontalCalibrationRef.current = null;
+    attendanceVerificationStartedAtRef.current = null;
     identityVerifiedRef.current = false;
     qualityPassedRef.current = false;
     attendancePresenceRef.current = false;
@@ -588,49 +667,112 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
   }, [stopCamera]);
 
   const saveEnrollment = useCallback(async () => {
-    if (!humanRef.current || enrollmentSamplesRef.current.length < REQUIRED_ENROLLMENT_SAMPLES || !qualityPassedRef.current || completedChallengesRef.current.length !== challengeOrderRef.current.length) {
-      setErrorMessage(`Pendaftaran belum cukup kuat. Selesaikan lima gerakan, lalu kembali hadap kamera sampai ${REQUIRED_ENROLLMENT_SAMPLES} sampel wajah tengah terkumpul.`);
-      return;
-    }
-    const nextTemplate: FaceTemplate = {
-      descriptors: enrollmentSamplesRef.current,
-      createdAt: new Date().toISOString(),
-      modelVersion: humanRef.current.version,
-      embeddingModel: "insightface-mobilenet-swish",
-    };
     if (!currentUser) return;
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("d3_face_biometric_templates")
-      .upsert({
-        employee_id: currentUser.employeeId,
-        auth_user_id: currentUser.id,
-        embedding_model: nextTemplate.embeddingModel,
-        embedding_version: 2,
-        descriptors: nextTemplate.descriptors,
-        enrollment_quality: {
-          face_confidence: faceConfidence,
-          liveness_score: livenessScore ?? null,
-          anti_spoof_score: antiSpoofScore ?? null,
-          sample_count: nextTemplate.descriptors.length,
-        },
-        enrolled_at: nextTemplate.createdAt,
-        updated_at: nextTemplate.createdAt,
-      }, { onConflict: "employee_id" });
-
-    if (error) {
-      setErrorMessage(error.code === "42501"
-        ? "Akun ini belum memiliki akses employee yang sesuai untuk menyimpan biometrik."
-        : "Template biometrik belum dapat disimpan. Periksa koneksi lalu coba kembali.");
+    if (faceSamplePhotosRef.current.length < REQUIRED_FACE_SAMPLES || !qualityPassedRef.current || completedChallengesRef.current.length !== challengeOrderRef.current.length) {
+      setErrorMessage(`Selesaikan liveness lalu hadap lurus ke kamera sampai ${REQUIRED_FACE_SAMPLES} sampel wajah otomatis terkumpul.`);
       return;
     }
+    setIsSavingTemplate(true);
+    setSavingStage("Memastikan sesi akun…");
+    setErrorMessage("");
+    const supabase = createClient();
+    try {
+      const samples = faceSamplePhotosRef.current;
+      const descriptors = samples.map((sample) => sample.descriptor);
 
-    templateRef.current = nextTemplate;
-    setTemplate(nextTemplate);
-    setScanState("complete");
-    setActionMessage("Template biometrik tersimpan dan terikat ke akun karyawan ini.");
-    stopCamera();
-  }, [antiSpoofScore, currentUser, faceConfidence, livenessScore, stopCamera]);
+      if (descriptors.length !== REQUIRED_FACE_SAMPLES || descriptors.some((descriptor) => descriptor.length === 0)) {
+        setErrorMessage("Salah satu sampel wajah tidak dapat diproses. Mulai pemindaian baru lalu coba kembali.");
+        return;
+      }
+
+      const { data: { user: sessionUser }, error: sessionError } = await supabase.auth.getUser();
+      if (sessionError || sessionUser?.id !== currentUser.id) {
+        setErrorMessage("Sesi login tidak cocok untuk menyimpan sampel wajah. Login ulang lalu coba lagi.");
+        return;
+      }
+
+      // Store every enrollment in a new private folder. This avoids partially
+      // overwriting a previous template when a network request is interrupted.
+      const enrollmentId = crypto.randomUUID();
+      const samplePaths = samples.map((_, index) => `${currentUser.id}/${enrollmentId}/sample-${index + 1}.webp`);
+      const uploadedPaths: string[] = [];
+      for (let index = 0; index < samplePaths.length; index += 1) {
+        setSavingStage(`Menyimpan sampel wajah ${index + 1} dari ${REQUIRED_FACE_SAMPLES}…`);
+        const path = samplePaths[index];
+        const photo = new File([samples[index].blob], `sample-${index + 1}.webp`, { type: "image/webp" });
+        const { error: uploadError } = await supabase.storage
+          .from("d3-biometric-face-samples")
+          .upload(path, photo, { contentType: "image/webp", cacheControl: "31536000", upsert: false });
+
+        if (uploadError) {
+          if (uploadedPaths.length > 0) {
+            await supabase.storage.from("d3-biometric-face-samples").remove(uploadedPaths);
+          }
+          setErrorMessage(`Sampel wajah ke-${index + 1} ditolak oleh penyimpanan privat: ${uploadError.message}`);
+          return;
+        }
+        uploadedPaths.push(path);
+      }
+
+      setSavingStage("Menyimpan template biometrik…");
+
+      const nextTemplate: FaceTemplate = {
+        descriptors: descriptors.filter((descriptor): descriptor is number[] => Boolean(descriptor)),
+        createdAt: new Date().toISOString(),
+        modelVersion: "human-3.3.6-insightface",
+        embeddingModel: "insightface-mobilenet-swish",
+        samplePaths,
+      };
+      const previousTemplate = templateRef.current;
+      const { error } = await supabase
+        .from("d3_face_biometric_templates")
+        .upsert({
+          employee_id: currentUser.employeeId,
+          auth_user_id: currentUser.id,
+          embedding_model: nextTemplate.embeddingModel,
+          embedding_version: 3,
+          descriptors: nextTemplate.descriptors,
+          sample_paths: nextTemplate.samplePaths,
+          enrollment_quality: {
+            face_confidence: faceConfidence,
+            liveness_score: livenessScore ?? null,
+            sample_count: nextTemplate.descriptors.length,
+          },
+          enrolled_at: nextTemplate.createdAt,
+          updated_at: nextTemplate.createdAt,
+        }, { onConflict: "employee_id" });
+
+      if (error) {
+        await supabase.storage.from("d3-biometric-face-samples").remove(uploadedPaths);
+        setErrorMessage(error.code === "42501"
+          ? "Akun ini belum memiliki akses employee yang sesuai untuk menyimpan biometrik."
+          : error.code === "23514"
+            ? "Template biometrik tidak memenuhi aturan jumlah sampel. Mulai pemindaian baru lalu coba lagi."
+            : "Template biometrik belum dapat disimpan. Periksa koneksi lalu coba kembali.");
+        return;
+      }
+
+      templateRef.current = nextTemplate;
+      setTemplate(nextTemplate);
+      if (previousTemplate?.samplePaths?.length) {
+        setSavingStage("Merapikan sampel registrasi sebelumnya…");
+        await supabase.storage.from("d3-biometric-face-samples").remove(previousTemplate.samplePaths);
+      }
+      setScanState("complete");
+      setActionMessage(previousTemplate
+        ? "Template biometrik dan lima sampel wajah berhasil diperbarui."
+        : "Template biometrik dan lima sampel wajah berhasil tersimpan.");
+      stopCamera();
+    } finally {
+      setIsSavingTemplate(false);
+      setSavingStage("");
+    }
+  }, [currentUser, faceConfidence, livenessScore, stopCamera]);
+
+  useEffect(() => {
+    if (!isEnrollment || !canFinalize || isSavingTemplate || scanState !== "scanning") return;
+    void saveEnrollment();
+  }, [canFinalize, isEnrollment, isSavingTemplate, saveEnrollment, scanState]);
 
   const recordAttendance = useCallback(async () => {
     if (!identityVerifiedRef.current || !attendancePresenceRef.current || completedChallengesRef.current.length !== challengeOrderRef.current.length) {
@@ -696,14 +838,13 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
         event_type: type,
         similarity: matchScoreRef.current,
         liveness_score: livenessScore ?? null,
-        anti_spoof_score: antiSpoofScore ?? null,
       });
 
     setScanState("complete");
     setActionMessage(`${type === "CLOCK_IN" ? "Clock-in" : "Clock-out"} berhasil dicatat di Attendance History & Correction.${eventError ? " Audit biometrik belum tersimpan, tetapi data presensi sudah tercatat." : ""}`);
     stopCamera();
     window.setTimeout(() => router.push("/attendance"), 900);
-  }, [antiSpoofScore, currentUser, livenessScore, router, stopCamera]);
+  }, [currentUser, livenessScore, router, stopCamera]);
 
   useEffect(() => {
     let isMounted = true;
@@ -729,7 +870,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
         const user = { id: data.user.id, email: data.user.email ?? null, employeeId: access.employee_id };
         const { data: storedTemplate, error: templateError } = await supabase
           .from("d3_face_biometric_templates")
-          .select("descriptors, enrolled_at, embedding_model")
+          .select("descriptors, enrolled_at, embedding_model, sample_paths")
           .eq("auth_user_id", user.id)
           .maybeSingle();
         if (templateError && templateError.code !== "PGRST116") {
@@ -745,6 +886,7 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
             createdAt: storedTemplate.enrolled_at,
             modelVersion: "InsightFace",
             embeddingModel: storedTemplate.embedding_model as FaceTemplate["embeddingModel"],
+            samplePaths: Array.isArray(storedTemplate.sample_paths) ? storedTemplate.sample_paths as string[] : [],
           };
           templateRef.current = loadedTemplate;
           setTemplate(loadedTemplate);
@@ -762,17 +904,22 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  const statusItems = useMemo(() => [
-    { label: "Satu wajah", value: faceCount === 1 ? "Terdeteksi" : faceCount === 0 ? "Menunggu" : "Terlalu banyak wajah", valid: faceCount === 1 },
-    { label: "Kualitas wajah", value: faceConfidence > 0 ? `${faceConfidence}%` : "Menunggu", valid: faceConfidence >= 60 },
-    { label: "Ukuran wajah", value: faceSize > 0 ? `${faceSize}px` : "Menunggu", valid: faceSize >= MIN_FACE_SIZE_PX },
-    { label: "Hadap kamera", value: facingCenter ? "Terpusat" : "Kembali ke tengah", valid: facingCenter },
-    { label: "Liveness", value: livenessLabel(livenessScore), valid: typeof livenessScore === "number" && livenessScore >= 0.6 },
-    { label: "Anti-spoof", value: typeof antiSpoofScore === "number" ? `${Math.round(antiSpoofScore * 100)}%` : "Menunggu", valid: typeof antiSpoofScore === "number" && antiSpoofScore >= 0.6 },
-    ...(isEnrollment
-      ? [{ label: "Sampel wajah tengah", value: `${enrollmentSampleCount}/${REQUIRED_ENROLLMENT_SAMPLES}`, valid: enrollmentSampleCount >= REQUIRED_ENROLLMENT_SAMPLES }]
-      : [{ label: "Identitas wajah", value: matchScore === null ? "Menunggu" : identityVerified ? `Terverifikasi • ${matchScore}%` : `${matchScore}% • ${stableMatchFrames}/${REQUIRED_STABLE_MATCHES} frame`, valid: identityVerified }]),
-  ], [antiSpoofScore, enrollmentSampleCount, faceConfidence, faceCount, faceSize, facingCenter, identityVerified, isEnrollment, livenessScore, matchScore, stableMatchFrames]);
+  const activePrompt = activeChallenge && scanState === "scanning" ? challengeDetails[activeChallenge] : null;
+  const cameraWarning = scanState === "scanning" && !identityVerified
+    ? faceCount === 0
+      ? "Posisikan satu wajah ke dalam bingkai kamera."
+      : faceCount > 1
+        ? "Hanya satu wajah boleh terlihat di kamera."
+        : faceConfidence < 60
+          ? "Pencahayaan atau fokus kamera belum cukup jelas."
+          : !activePrompt && !facingCenter
+            ? "Kembali hadap lurus ke kamera."
+            : (livenessScore ?? 0) < 0.6
+              ? "Tunggu liveness membaca wajahmu dengan jelas."
+              : null
+    : null;
+  const attendanceReady = !isEnrollment && identityVerified && allChallengesCompleted && Boolean(template) && scanState === "scanning";
+  const compactCamera = attendanceReady || isAttendanceRejected;
 
   const title = isEnrollment ? "Biometric Registration" : "Face Biometric Attendance";
   const subtitle = isEnrollment
@@ -797,6 +944,17 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
         </div>
       </header>
 
+      {isSavingTemplate && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#0a1931]/45 p-4 backdrop-blur-sm" role="status" aria-live="polite">
+          <div className="w-full max-w-sm rounded-2xl border border-white/20 bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto grid size-12 place-items-center rounded-full bg-[#e9f3ff] text-[#1971c2]"><LoaderCircle size={24} className="animate-spin" /></div>
+            <h2 className="mt-4 text-base font-bold text-[#172033]">Menyimpan registrasi biometrik</h2>
+            <p className="mt-2 text-sm leading-6 text-[#60708d]">{savingStage || "Memproses sampel wajah…"}</p>
+            <p className="mt-3 text-[11px] text-[#8290a8]">Jangan menutup halaman sampai proses selesai.</p>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
         <section className="rounded-2xl border border-[#dbe6f7] bg-white p-5 shadow-[0_4px_18px_rgba(27,53,102,0.06)] sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between xl:items-center">
@@ -811,23 +969,25 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
         {actionMessage && (
           <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800"><CheckCircle2 size={17} className="mt-0.5 shrink-0" />{actionMessage}</div>
         )}
-        {errorMessage && (
+        {errorMessage && !isAttendanceRejected && (
           <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700"><CircleAlert size={17} className="mt-0.5 shrink-0" />{errorMessage}</div>
         )}
 
-        <div className="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="mx-auto mt-5 w-full max-w-3xl">
           <section className="overflow-hidden rounded-2xl border border-[#dbe4f0] bg-white shadow-[0_4px_18px_rgba(27,53,102,0.06)]">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e7edf5] px-5 py-4">
-              <div><h3 className="text-sm font-bold text-[#172033]">Kamera verifikasi</h3><p className="mt-0.5 text-xs text-[#60708d]">Pastikan wajah terlihat jelas dan hanya ada satu orang di kamera.</p></div>
+              <div><h3 className="text-sm font-bold text-[#172033]">Kamera verifikasi</h3><p className="mt-0.5 text-xs text-[#60708d]">Ikuti instruksi yang muncul di dalam bingkai kamera.</p></div>
               <span className={`rounded-full px-3 py-1 text-[10px] font-bold ${scanState === "scanning" ? "bg-[#e9f3ff] text-[#1971c2]" : scanState === "error" ? "bg-red-50 text-red-600" : "bg-[#f1f5fa] text-[#60708d]"}`}>{scanState === "scanning" ? "MEMINDAI" : scanState === "loading" ? "MENYIAPKAN MODEL" : scanState === "complete" ? "SELESAI" : "SIAP"}</span>
             </div>
 
-            <div className="relative mx-auto aspect-square w-full max-w-[500px] p-7 sm:p-10">
-              <div className="absolute inset-3 rounded-full border border-[#307ee7]/25 shadow-[0_0_44px_rgba(42,120,230,0.18)]" />
-              <div className="absolute inset-7 rounded-[46%] border border-[#65b5ff]/55" />
-              <div className="relative size-full overflow-hidden rounded-[46%] border-2 border-[#77c0ff]/65 bg-[#071225] shadow-[0_0_0_10px_rgba(36,113,213,0.08),0_0_50px_rgba(29,115,227,0.25)]">
+            <div className={`relative mx-auto aspect-square w-full transition-all duration-500 ${compactCamera ? "max-w-[300px] p-5 sm:p-6" : "max-w-[500px] p-7 sm:p-10"}`}>
+              <div className={`absolute inset-3 rounded-full border shadow-[0_0_44px_rgba(27,53,102,0.18)] ${isAttendanceRejected ? "border-red-400/35" : "border-[#307ee7]/25"}`} />
+              <div className={`absolute inset-7 rounded-[46%] border ${isAttendanceRejected ? "border-red-300/60" : "border-[#65b5ff]/55"}`} />
+              <div className={`relative size-full overflow-hidden rounded-[46%] border-2 shadow-[0_0_0_10px_rgba(36,113,213,0.08),0_0_50px_rgba(29,115,227,0.25)] ${isAttendanceRejected ? "border-red-300/70 bg-[#260912]" : "border-[#77c0ff]/65 bg-[#071225]"}`}>
               <video ref={videoRef} muted playsInline className={`size-full origin-center scale-x-[-1] object-cover transition duration-500 ${scanState === "scanning" ? "opacity-100" : "opacity-25"}`} />
-              {scanState !== "scanning" && (
+              {isAttendanceRejected ? (
+                <div className="absolute inset-0 grid place-items-center p-6 text-center text-red-100"><div><div className="mx-auto grid size-14 place-items-center rounded-full border border-red-200/30 bg-red-500/20"><CircleAlert size={27} /></div><p className="mt-3 text-xs font-bold tracking-[0.08em]">WAJAH TIDAK TERVERIFIKASI</p></div></div>
+              ) : scanState !== "scanning" && (
                 <div className="absolute inset-0 grid place-items-center p-6 text-center text-[#d9e2fc]">
                   <div><div className="mx-auto grid size-14 place-items-center rounded-full border border-white/20 bg-white/10"><Video size={25} /></div><p className="mt-3 text-sm font-bold">Kamera belum aktif</p><p className="mt-1 text-xs text-[#d9e2fc]/70">Tekan mulai untuk memberi izin kamera dan memuat model.</p></div>
                 </div>
@@ -846,13 +1006,20 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
                   </g>
                 </svg>}
                 <div className="pointer-events-none absolute inset-x-[14%] h-px bg-[#c4ecff] shadow-[0_0_18px_4px_rgba(83,184,255,0.85)]" style={{ animation: "biometric-scan-sweep 2.15s ease-in-out infinite" }} />
-                <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-[#061326]/75 px-3 py-1 text-[9px] font-bold tracking-[0.14em] text-[#dcefff]">FACE LOCK</div>
+                {activePrompt && <div className="pointer-events-none absolute inset-x-4 top-4 rounded-xl border border-white/20 bg-[#061326]/85 p-3 text-center text-white shadow-lg"><p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#9ed1ff]">Liveness {completedChallenges.length + 1}/{challengeOrder.length}</p><p className="mt-1 text-sm font-bold">{activePrompt.label}</p><p className="mt-0.5 text-[11px] text-[#dcefff]">{activePrompt.helper}</p></div>}
+                {isEnrollment && allChallengesCompleted && !isSavingTemplate && <div className="pointer-events-none absolute left-1/2 top-4 max-w-[calc(100%-2rem)] -translate-x-1/2 whitespace-nowrap rounded-full border border-[#9ed1ff]/35 bg-[#061326]/85 px-3 py-1.5 text-center text-[10px] font-bold text-white shadow-lg">Mengambil sampel {faceSampleCount}/{REQUIRED_FACE_SAMPLES} · diam sebentar</div>}
+                {!isEnrollment && allChallengesCompleted && !identityVerified && <div className="pointer-events-none absolute left-1/2 top-4 max-w-[calc(100%-2rem)] -translate-x-1/2 whitespace-nowrap rounded-full border border-[#9ed1ff]/35 bg-[#061326]/85 px-3 py-1.5 text-center text-[10px] font-bold text-white shadow-lg">Memverifikasi wajah…</div>}
+                {cameraWarning && <div className="pointer-events-none absolute inset-x-4 bottom-4 rounded-xl border border-amber-200/35 bg-[#2a210d]/85 p-2.5 text-center text-[11px] font-semibold text-amber-100">{cameraWarning}</div>}
+                {attendanceReady && <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-emerald-500/90 px-3 py-1 text-[9px] font-bold tracking-[0.12em] text-white">WAJAH TERVERIFIKASI</div>}
+                {!attendanceReady && !cameraWarning && !activePrompt && <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-[#061326]/75 px-3 py-1 text-[9px] font-bold tracking-[0.14em] text-[#dcefff]">FACE LOCK</div>}
               </>}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 border-t border-[#e7edf5] p-5">
-              {scanState === "loading" || isResolvingSession ? (
+              {isAttendanceRejected ? (
+                <button type="button" onClick={() => void startScan()} className="inline-flex items-center gap-2 rounded-lg bg-[#c4343f] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#a82431]"><Video size={16} /> Coba kembali</button>
+              ) : scanState === "loading" || isResolvingSession ? (
                 <button disabled className="inline-flex items-center gap-2 rounded-lg bg-[#0f2342] px-4 py-2.5 text-xs font-bold text-white opacity-75"><LoaderCircle size={16} className="animate-spin" /> Menyiapkan kamera & model…</button>
               ) : scanState === "scanning" ? (
                 <button type="button" onClick={resetScan} className="inline-flex items-center gap-2 rounded-lg border border-[#d64545]/25 bg-red-50 px-4 py-2.5 text-xs font-bold text-[#b4232b] transition hover:bg-red-100"><VideoOff size={16} /> Batalkan pemindaian</button>
@@ -861,35 +1028,11 @@ export default function FaceBiometricWorkspace({ mode }: { mode: Mode }) {
               )}
               {!isEnrollment && !template && <Link href="/biometric-enrollment" className="text-xs font-semibold text-[#1971c2] underline underline-offset-4">Belum ada template untuk akun ini. Daftarkan biometrik.</Link>}
             </div>
+
+            {attendanceReady && <div className="mx-5 mb-5 flex flex-col justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center"><div><p className="text-sm font-bold text-emerald-900">Wajah terverifikasi</p><p className="mt-1 text-xs text-emerald-800">Status identitas terkunci. Pastikan wajah masih terlihat saat mencatat kehadiran.</p></div><button type="button" onClick={() => void recordAttendance()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#006838] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#005b30]"><Clock3 size={16} /> Catat ke Attendance History</button></div>}
+            {isAttendanceRejected && <div className="mx-5 mb-5 flex flex-col justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center"><div><p className="text-sm font-bold text-red-800">Wajah tidak terverifikasi</p><p className="mt-1 text-xs text-red-700">Wajah tidak cocok dengan template akun ini. Coba ulangi pemindaian dengan pemilik akun.</p></div><button type="button" onClick={() => void startScan()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#c4343f] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#a82431]"><Video size={16} /> Coba kembali</button></div>}
           </section>
-
-          <aside className="space-y-5">
-            <section className="rounded-2xl border border-[#dbe4f0] bg-white p-5 shadow-[0_4px_18px_rgba(27,53,102,0.06)]">
-              <div className="flex items-center justify-between"><h3 className="text-sm font-bold">Liveness Checking</h3><span className="text-xs font-bold text-[#1971c2]">{completedChallenges.length}/{challengeOrder.length || 5}</span></div>
-              <p className="mt-1 text-xs leading-5 text-[#4d5f81] xl:leading-4">Selesaikan seluruh gerakan secara berurutan untuk melanjutkan.</p>
-              <div className="mt-4 space-y-2">
-                {(challengeOrder.length ? challengeOrder : (["left", "right", "up", "down", "blink"] as ChallengeId[])).map((challenge, index) => {
-                  const completed = completedChallenges.includes(challenge);
-                  const active = activeChallenge === challenge && scanState === "scanning";
-                  return <div key={challenge} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${completed ? "border-emerald-200 bg-emerald-50" : active ? "border-[#b9d6ff] bg-[#edf6ff]" : "border-slate-100 bg-[#f7f8ff]"}`}><span className={`grid size-6 place-items-center rounded-full text-[10px] font-bold ${completed ? "bg-[#16834b] text-white" : active ? "bg-[#1971c2] text-white" : "bg-white text-[#4d5f81]"}`}>{completed ? <Check size={14} /> : index + 1}</span><div><p className="text-xs font-bold">{challengeDetails[challenge].label}</p><p className="text-[10px] text-[#4d5f81]">{challengeDetails[challenge].helper}</p></div></div>;
-                })}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-[#dbe4f0] bg-white p-5 shadow-[0_4px_18px_rgba(27,53,102,0.06)]">
-              <h3 className="text-sm font-bold">Status verifikasi</h3>
-              <div className="mt-3 space-y-2.5">{statusItems.map((item) => <div key={item.label} className="flex items-center justify-between gap-3 text-xs"><span className="text-[#4d5f81]">{item.label}</span><span className={`inline-flex items-center gap-1 font-bold ${item.valid ? "text-[#006838]" : "text-[#b7791f]"}`}>{item.valid ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}{item.value}</span></div>)}</div>
-            </section>
-          </aside>
         </div>
-
-        <section className="mt-5 rounded-2xl border border-[#dbe4f0] bg-white p-5 shadow-[0_4px_18px_rgba(27,53,102,0.06)]">
-          {isEnrollment ? (
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><h3 className="text-sm font-bold">Simpan template biometrik</h3><p className="mt-1 text-xs leading-5 text-[#4d5f81]">Selesaikan lima Liveness Checking, lalu hadap kamera sampai {REQUIRED_ENROLLMENT_SAMPLES} sampel wajah tengah terkumpul.</p>{currentUser?.email && <p className="mt-1 text-[11px] font-semibold text-[#1971c2]">Dipetakan ke akun: {currentUser.email}</p>}{template && <p className="mt-2 text-[11px] font-semibold text-[#006838]">Template terakhir: {formatTime(template.createdAt)} • Human {template.modelVersion}</p>}</div><button type="button" disabled={!canFinalize} onClick={() => void saveEnrollment()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#006838] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#005b30] disabled:cursor-not-allowed disabled:bg-slate-300"><UserRoundCheck size={16} /> Simpan template</button></div>
-          ) : (
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><h3 className="text-sm font-bold">Simpan ke Attendance History</h3><p className="mt-1 text-xs leading-5 text-[#4d5f81]">Setelah identitas dan liveness terverifikasi, clock-in atau clock-out akan dicatat pada fitur Attendance History & Correction.</p><p className="mt-1 text-[11px] font-semibold text-[#1971c2]">Identitas harus cocok minimal {Math.round(MIN_IDENTITY_SIMILARITY * 100)}% selama {REQUIRED_STABLE_MATCHES} frame stabil. Setelah terverifikasi, gerakan kecil tidak langsung membatalkan tombol.</p></div><button type="button" disabled={!canFinalize || !template} onClick={() => void recordAttendance()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-[#006838] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#005b30] disabled:cursor-not-allowed disabled:bg-slate-300"><Clock3 size={16} /> Catat ke Attendance History</button></div>
-          )}
-        </section>
 
         <p className="mt-5 flex items-start gap-2 text-[11px] leading-5 text-[#4d5f81]"><Eye size={14} className="mt-0.5 shrink-0" /> Eksperimen ini bukan alat absensi produksi dan tidak menggantikan kebijakan HR. Hasil dapat dipengaruhi kualitas kamera, pencahayaan, serta kemampuan model.</p>
       </div>

@@ -51,28 +51,35 @@ export default async function EmployeesPage() {
   }
 
   const employees = data ?? [];
+  const profileName = typeof user.user_metadata.full_name === "string"
+    ? user.user_metadata.full_name
+    : user.email?.split("@")[0] ?? "HR Manager";
+  const profileRole = userRole === "HR" ? "HR / Manager" : userRole ?? "Employee";
+  const profileInitials = profileName.split(/\s+/).filter(Boolean).slice(0, 2).map((name) => name[0]?.toUpperCase()).join("") || "HR";
 
   return (
     <HrmsShell userEmail={user.email} userRole={userRole}>
-      <section className="mx-auto max-w-[1240px]">
-        <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-bold tracking-[0.16em] text-[#1E3765]">EMPLOYEE MANAGEMENT</p>
-            <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Employee Directory</h1>
-            <p className="mt-3 text-base text-slate-600">Manage 360° profiles for all employees of PT Andima Transportindo.</p>
-          </div>
+      <section className="mx-auto max-w-[1052px]">
+        <header className="mb-3 flex items-center justify-between gap-4">
+          <h1 className="text-[30px] font-bold tracking-[-0.04em] text-[#121B2E] sm:text-[32px]">Employee Directory</h1>
           {canManageEmployees && (
             <Link
-              className="inline-flex h-11 items-center justify-center rounded-[15px] bg-[#155DFC] px-5 text-sm font-bold text-white shadow-[3px_3px_14px_rgba(87,138,252,0.4)] transition hover:bg-[#0D4FDB]"
+              className="inline-flex h-8 items-center justify-center rounded-md bg-[#155DFC] px-3 text-xs font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition hover:bg-[#0D4FDB]"
               href="/employees/new"
             >
-              Tambah Pegawai
+              + Add Employees
             </Link>
           )}
         </header>
 
+        <div className="flex min-h-[109px] items-center gap-4 rounded-[10px] border border-[#578AFC]/30 bg-white px-5 py-4 shadow-[3px_3px_20px_rgba(87,138,252,0.5)]">
+          <span className="flex size-[48px] shrink-0 items-center justify-center rounded-full bg-[#6DA9CA] text-lg font-bold text-white">{profileInitials}</span>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-[25px] font-medium leading-7 text-[#27324A]">{profileName}</p><span className="rounded-full border border-[#16A37A]/75 px-1.5 py-px text-[8px] font-medium text-[#16A37A]">active</span></div><p className="mt-1 text-[11px] font-semibold text-[#1E3765]">{profileRole}</p></div>
+        </div>
+        <p className="mt-3 text-[11px] font-medium text-[#26334F]">Manage 360° profiles for all employees of PT Andima Transportindo.</p>
+
         {employees.length === 0 ? (
-          <div className="rounded-xl border border-[#D9E2FC] bg-white p-6 text-slate-600 shadow-sm">
+          <div className="mt-4 rounded-xl border border-[#D9E2FC] bg-white p-6 text-slate-600 shadow-sm">
             Belum ada data pegawai.
           </div>
         ) : (
