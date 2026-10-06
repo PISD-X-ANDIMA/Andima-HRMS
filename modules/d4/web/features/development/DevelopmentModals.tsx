@@ -6,7 +6,7 @@ import { useD4, useSnapshot } from "../../data/D4DataProvider";
 import { isDevelopmentRollback, openNeedFor } from "../../../shared/rules";
 import { assessableEmployees, currentGap, developmentNeeds, employeeById, formatDate, formatPeriod, positionOf, sourceTypeLabel, today, trainings } from "../../data/selectors";
 import { FormError, FormModal, ModalActions, ReadOnlyField, SelectField, TextAreaField, TextField } from "../../ui/forms";
-import { Notice } from "../../ui/primitives";
+import { Notice, statusLabel } from "../../ui/primitives";
 
 type SourceOption = { ref: string; label: string; covered?: boolean };
 
@@ -45,7 +45,7 @@ export function DevelopmentFormModal({ employeeId, sourceType, sourceRef, onClos
     event.preventDefault();
     setTouched(true);
     const chosen = options.find((item) => item.ref === reference && !item.covered);
-    if (!employee || !chosen || !objective.trim()) { setError("Lengkapi employee, referensi sumber, dan development objective."); return; }
+    if (!employee || !chosen || !objective.trim()) { setError("Lengkapi karyawan, referensi sumber, dan tujuan pengembangan."); return; }
     setError("");
     // The gap changes as competencies are updated; keep the level seen when the need was raised.
     const snapshotNote = type === "competency_gap" ? `Gap saat dibuat (${formatDate(today())}): ${chosen.label}` : "";
@@ -53,34 +53,34 @@ export function DevelopmentFormModal({ employeeId, sourceType, sourceRef, onClos
     if (result.ok) { onSaved?.(result.value); onClose(); } else setError(result.error);
   }
 
-  return <FormModal title="Add Development Requirement" description="Setiap kebutuhan wajib punya sumber yang dapat ditelusuri." onClose={onClose}
-    footer={<ModalActions onCancel={onClose} busy={busy} submitLabel="Save Requirement" />}>
+  return <FormModal title="Tambah Development Requirement" description="Setiap kebutuhan wajib punya sumber yang dapat ditelusuri." onClose={onClose}
+    footer={<ModalActions onCancel={onClose} busy={busy} submitLabel="Simpan Requirement" />}>
     <form id="d4-modal-form" onSubmit={submit} noValidate className="space-y-5">
       <FormError message={error} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField label="Employee" required value={employee} onChange={(event) => { setEmployee(event.target.value); setReference(""); }} error={touched && !employee ? "Employee wajib dipilih." : undefined} className="sm:col-span-2">
-          <option value="">Select employee</option>
+        <SelectField label="Karyawan" testId="employee" required value={employee} onChange={(event) => { setEmployee(event.target.value); setReference(""); }} error={touched && !employee ? "Karyawan wajib dipilih." : undefined} className="sm:col-span-2">
+          <option value="">Pilih karyawan</option>
           {/* Same list as evaluations: never yourself (assertNotSelf), a manager only their team. */}
           {assessableEmployees(snapshot).map((item) => <option key={item.id} value={item.id}>{item.fullName} · {item.employeeId}</option>)}
         </SelectField>
-        <ReadOnlyField label="Position" value={positionOf(snapshot, employeeById(snapshot, employee))?.title ?? "—"} />
-        <SelectField label="Source type" required value={type} onChange={(event) => { setType(event.target.value as DevelopmentSourceType); setReference(""); }}>
+        <ReadOnlyField label="Posisi" testId="position" value={positionOf(snapshot, employeeById(snapshot, employee))?.title ?? "—"} />
+        <SelectField label="Jenis sumber" testId="source-type" required value={type} onChange={(event) => { setType(event.target.value as DevelopmentSourceType); setReference(""); }}>
           {(Object.keys(sourceTypeLabel) as DevelopmentSourceType[]).map((key) => <option key={key} value={key}>{sourceTypeLabel[key]}</option>)}
         </SelectField>
-        <SelectField label="Source reference" required value={reference} onChange={(event) => setReference(event.target.value)} className="sm:col-span-2"
+        <SelectField label="Referensi sumber" testId="source-reference" required value={reference} onChange={(event) => setReference(event.target.value)} className="sm:col-span-2"
           error={touched && !reference ? "Referensi sumber wajib dipilih." : undefined}>
-          <option value="">{options.some((item) => !item.covered) ? "Select source reference" : "Belum ada sumber yang valid"}</option>
+          <option value="">{options.some((item) => !item.covered) ? "Pilih referensi sumber" : "Belum ada sumber yang valid"}</option>
           {options.map((item) => <option key={item.ref} value={item.ref} disabled={item.covered}>{item.label}{item.covered ? " · sudah ada requirement terbuka" : ""}</option>)}
         </SelectField>
-        {employee && options.length > 0 && options.every((item) => item.covered) && <div className="sm:col-span-2"><Notice tone="warning">Semua gap kompetensi employee ini sudah memiliki development requirement yang belum selesai. Perbarui requirement yang ada di Development Requirement.</Notice></div>}
-        {employee && !options.length && <div className="sm:col-span-2"><Notice tone="warning">Employee ini belum memiliki sumber bertipe {sourceTypeLabel[type]}. Development tidak dibuat hanya karena periode waktu berlalu.</Notice></div>}
-        <TextField label="Development objective" required value={objective} onChange={(event) => setObjective(event.target.value)} error={touched && !objective.trim() ? "Objective wajib diisi." : undefined} className="sm:col-span-2" />
-        <SelectField label="Priority" value={priority} onChange={(event) => setPriority(event.target.value as DevelopmentPriority)}>
-          {(["High", "Medium", "Low"] as const).map((item) => <option key={item}>{item}</option>)}
+        {employee && options.length > 0 && options.every((item) => item.covered) && <div className="sm:col-span-2"><Notice tone="warning">Semua gap kompetensi karyawan ini sudah memiliki development requirement yang belum selesai. Perbarui requirement yang ada di Development Requirement.</Notice></div>}
+        {employee && !options.length && <div className="sm:col-span-2"><Notice tone="warning">Karyawan ini belum memiliki sumber bertipe {sourceTypeLabel[type]}. Development tidak dibuat hanya karena periode waktu berlalu.</Notice></div>}
+        <TextField label="Tujuan pengembangan" testId="development-objective" required value={objective} onChange={(event) => setObjective(event.target.value)} error={touched && !objective.trim() ? "Tujuan pengembangan wajib diisi." : undefined} className="sm:col-span-2" />
+        <SelectField label="Prioritas" testId="priority" value={priority} onChange={(event) => setPriority(event.target.value as DevelopmentPriority)}>
+          {(["High", "Medium", "Low"] as const).map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
         </SelectField>
-        <ReadOnlyField label="Created date" value={formatDate(today())} />
+        <ReadOnlyField label="Tanggal dibuat" testId="created-date" value={formatDate(today())} />
       </div>
-      <TextAreaField label="Notes" value={notes} onChange={(event) => setNotes(event.target.value)} helper="Metode training akhir dipilih HR; tidak ditentukan otomatis oleh gap." />
+      <TextAreaField label="Catatan" testId="notes" value={notes} onChange={(event) => setNotes(event.target.value)} helper="Metode training akhir dipilih HR; tidak ditentukan otomatis oleh gap." />
     </form>
   </FormModal>;
 }
@@ -99,20 +99,20 @@ export function DevelopmentStatusModal({ needId, onClose }: { needId: string; on
   async function submit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
-    if (rollback && !notes.trim()) { setError(`Alasan perubahan wajib diisi saat status kembali dari ${current?.status} ke ${status}.`); return; }
+    if (rollback && !notes.trim()) { setError(`Alasan perubahan wajib diisi saat status kembali dari ${statusLabel(current?.status ?? "")} ke ${statusLabel(status)}.`); return; }
     const result = await run((source) => source.updateDevelopment(needId, status, notes), "Status development diperbarui sebagai revisi baru.");
     if (result.ok) onClose(); else setError(result.error);
   }
-  return <FormModal title="Update Status" description={current?.objective} onClose={onClose} footer={<ModalActions onCancel={onClose} busy={busy} submitLabel="Save Status" />}>
+  return <FormModal title="Perbarui Status" description={current?.objective} onClose={onClose} footer={<ModalActions onCancel={onClose} busy={busy} submitLabel="Simpan Status" disabled={status === current?.status} />}>
     <form id="d4-modal-form" onSubmit={submit} className="space-y-5">
       <FormError message={error} />
       <SelectField label="Status" required value={status} onChange={(event) => setStatus(event.target.value as DevelopmentStatus)}>
-        {(["Identified", "Planned", "In Progress", "Completed"] as const).map((item) => <option key={item}>{item}</option>)}
+        {(["Identified", "Planned", "In Progress", "Completed"] as const).map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
       </SelectField>
-      {status === "Completed" && openTrainings.length > 0 && <Notice tone="warning">Masih ada {openTrainings.length} training berstatus Planned/In Progress untuk requirement ini ({openTrainings.map((item) => item.activity).join(", ")}). Selesaikan atau batalkan training tersebut dulu, atau jelaskan alasannya di Notes.</Notice>}
-      <TextAreaField label={rollback ? "Alasan perubahan" : "Notes"} required={rollback} value={notes} onChange={(event) => setNotes(event.target.value)}
+      {status === "Completed" && openTrainings.length > 0 && <Notice tone="warning">Masih ada {openTrainings.length} training berstatus Planned/In Progress untuk requirement ini ({openTrainings.map((item) => item.activity).join(", ")}). Selesaikan atau batalkan training tersebut dulu, atau jelaskan alasannya di Catatan.</Notice>}
+      <TextAreaField label={rollback ? "Alasan perubahan" : "Catatan"} testId="notes" required={rollback} value={notes} onChange={(event) => setNotes(event.target.value)}
         error={touched && rollback && !notes.trim() ? "Alasan wajib diisi." : undefined}
-        helper={rollback ? `Status mundur dari ${current?.status}; alasan tersimpan di riwayat revisi.` : undefined} />
+        helper={status === current?.status ? `Status sekarang ${statusLabel(status)}. Pilih status lain untuk menyimpan.` : rollback ? `Status mundur dari ${statusLabel(current?.status ?? "")}; alasan tersimpan di riwayat revisi.` : undefined} />
       <Notice>Perubahan disimpan sebagai revisi baru; riwayat sebelumnya tetap tersedia. Status Completed tidak menutup competency gap secara otomatis.</Notice>
     </form>
   </FormModal>;

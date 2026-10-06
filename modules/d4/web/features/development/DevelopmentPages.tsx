@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, History, Plus, RefreshCw } from "lucide-react";
+import { History, Plus, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { DevelopmentNeedVersion, DevelopmentSourceType } from "../../../development/types";
 import { useSnapshot } from "../../data/D4DataProvider";
@@ -9,7 +9,7 @@ import { DataTable, PersonCell } from "../../ui/DataTable";
 import { FilterBar, SearchInput, SelectFilter } from "../../ui/forms";
 import { DetailHeader, NotFound, PageHeader, Timeline } from "../../ui/layout";
 import { RowActionMenu } from "../../ui/RowActionMenu";
-import { Button, ButtonLink, Card, InfoGrid, Notice, SourceChip, StatusBadge } from "../../ui/primitives";
+import { Button, ButtonLink, Card, InfoGrid, Notice, SourceChip, statusLabel, StatusBadge } from "../../ui/primitives";
 import { DevelopmentFormModal, DevelopmentStatusModal } from "./DevelopmentModals";
 
 export function DevelopmentListPage() {
@@ -34,27 +34,26 @@ export function DevelopmentListPage() {
 
   return <>
     <PageHeader title="Development Requirement" subtitle="Kebutuhan development/training dengan alasan dan sumber yang dapat ditelusuri."
-      actions={writer && <Button icon={<Plus className="size-4" />} onClick={() => setAdding(true)}>Add Requirement</Button>} />
+      actions={writer && <Button icon={<Plus className="size-4" />} onClick={() => setAdding(true)} data-testid="btn-add-requirement">Tambah Requirement</Button>} />
     <FilterBar canReset={Boolean(search || sourceType || status || period)} onReset={() => { setSearch(""); setSourceType(""); setStatus(""); setPeriod(""); }}>
-      <SearchInput value={search} onChange={setSearch} placeholder="Search employee or objective" />
-      <SelectFilter label="All sources" value={sourceType} onChange={setSourceType} options={(Object.keys(sourceTypeLabel) as DevelopmentSourceType[]).map((key) => ({ value: key, label: sourceTypeLabel[key] }))} />
-      <SelectFilter label="All status" value={status} onChange={setStatus} options={["Identified", "Planned", "In Progress", "Completed"].map((item) => ({ value: item, label: item }))} />
-      <SelectFilter label="All periods" value={period} onChange={setPeriod} options={periods.map((item) => ({ value: item, label: formatPeriod(item) }))} />
+      <SearchInput value={search} onChange={setSearch} placeholder="Cari karyawan atau tujuan" />
+      <SelectFilter label="Semua sumber" testId="all-sources" value={sourceType} onChange={setSourceType} options={(Object.keys(sourceTypeLabel) as DevelopmentSourceType[]).map((key) => ({ value: key, label: sourceTypeLabel[key] }))} />
+      <SelectFilter label="Semua status" testId="all-status" value={status} onChange={setStatus} options={["Identified", "Planned", "In Progress", "Completed"].map((item) => ({ value: item, label: statusLabel(item) }))} />
+      <SelectFilter label="Semua periode" testId="all-periods" value={period} onChange={setPeriod} options={periods.map((item) => ({ value: item, label: formatPeriod(item) }))} />
     </FilterBar>
-    <DataTable<DevelopmentNeedVersion> rows={rows} noun="requirements" rowKey={(row) => row.needId} rowHref={(row) => `/development/${row.needId}`}
+    <DataTable<DevelopmentNeedVersion> rows={rows} noun="requirement" rowKey={(row) => row.needId} rowHref={(row) => `/development/${row.needId}`}
       emptyTitle="Belum ada development requirement" emptyText="Buat requirement dari competency gap, perubahan posisi, atau evaluasi kinerja."
       columns={[
-        { key: "employee", header: "Employee", cell: (row) => { const employee = employeeById(snapshot, row.employeeId); return <PersonCell name={employee?.fullName ?? "—"} code={employee?.employeeId ?? ""} />; } },
-        { key: "objective", header: "Objective", wrap: true, className: "max-w-[320px]", cell: (row) => <span className="line-clamp-2">{row.objective}</span> },
-        { key: "source", header: "Source", cell: (row) => <SourceChip label={sourceTypeLabel[row.sourceType]} /> },
-        { key: "priority", header: "Priority", cell: (row) => row.priority },
+        { key: "employee", header: "Karyawan", cell: (row) => { const employee = employeeById(snapshot, row.employeeId); return <PersonCell name={employee?.fullName ?? "—"} code={employee?.employeeId ?? ""} />; } },
+        { key: "objective", header: "Tujuan", wrap: true, className: "max-w-[320px]", cell: (row) => <span className="line-clamp-2">{row.objective}</span> },
+        { key: "source", header: "Sumber", cell: (row) => <SourceChip label={sourceTypeLabel[row.sourceType]} /> },
+        { key: "priority", header: "Prioritas", cell: (row) => statusLabel(row.priority) },
         { key: "status", header: "Status", cell: (row) => <StatusBadge status={row.status} /> },
-        { key: "updated", header: "Updated", cell: (row) => formatDate(row.createdAt) },
+        { key: "updated", header: "Diperbarui", cell: (row) => formatDate(row.createdAt) },
       ]}
       actions={(row) => <RowActionMenu label={`Aksi untuk ${row.objective}`} actions={[
-        { label: "View Detail", icon: <Eye />, href: `/development/${row.needId}` },
-        { label: "View History", icon: <History />, href: `/development/${row.needId}/history` },
-        { label: "Update Status", icon: <RefreshCw />, onSelect: () => setStatusFor(row.needId), hidden: !writer },
+        { label: "Lihat Riwayat", testId: "view-history", icon: <History />, href: `/development/${row.needId}/history` },
+        { label: "Ubah Status", testId: "update-status", icon: <RefreshCw />, onSelect: () => setStatusFor(row.needId), hidden: !writer },
       ]} />} />
     {adding && <DevelopmentFormModal onClose={() => setAdding(false)} />}
     {statusFor && <DevelopmentStatusModal needId={statusFor} onClose={() => setStatusFor(null)} />}
@@ -75,31 +74,31 @@ export function DevelopmentDetailPage({ needId }: { needId: string }) {
     <DetailHeader crumbs={[{ label: "HRMS" }, { label: "Development Requirement", href: "/development" }, { label: "Detail" }]} backHref="/development"
       name={employee.fullName} meta={[positionOf(snapshot, employee)?.title ?? "", employee.employeeId, `Revisi ${need.revision}`]} status={need.status}
       actions={<>
-        <ButtonLink href={`/development/${need.needId}/history`} icon={<History className="size-4" />}>View History</ButtonLink>
-        {writer && <Button variant="secondary" icon={<RefreshCw className="size-4" />} onClick={() => setStatusOpen(true)}>Update Status</Button>}
+        <ButtonLink href={`/development/${need.needId}/history`} icon={<History className="size-4" />} testId="view-history">Lihat Riwayat</ButtonLink>
+        {writer && <Button variant="secondary" icon={<RefreshCw className="size-4" />} onClick={() => setStatusOpen(true)} data-testid="btn-update-status">Ubah Status</Button>}
         {/* A completed requirement cannot take new training (assertNeedOpen). */}
       </>} />
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
       <Card title="Requirement">
         <p className="font-display text-lg text-ink">{need.objective}</p>
         <div className="mt-6"><InfoGrid columns={3} items={[
-          { label: "Priority", value: need.priority },
+          { label: "Prioritas", testId: "priority", value: statusLabel(need.priority) },
           { label: "Status", value: <StatusBadge status={need.status} /> },
-          { label: "Last updated", value: `${formatDate(need.createdAt)} · ${need.actor}` },
-          { label: "Created", value: formatDate(history[history.length - 1]?.createdAt) },
-          { label: "Revisions", value: String(history.length) },
+          { label: "Terakhir diperbarui", testId: "last-updated", value: `${formatDate(need.createdAt)} · ${need.actor}` },
+          { label: "Dibuat", testId: "created", value: formatDate(history[history.length - 1]?.createdAt) },
+          { label: "Revisi", testId: "revisions", value: String(history.length) },
         ]} /></div>
-        <h3 className="mb-2 mt-8 text-sm font-semibold text-ink-2">Notes</h3>
+        <h3 className="mb-2 mt-8 text-sm font-semibold text-ink-2">Catatan</h3>
         <p className="whitespace-pre-wrap text-sm text-ink-2">{need.notes || "—"}</p>
       </Card>
       <div className="space-y-6">
-        <Card title="Source (traceability)">
+        <Card title="Sumber (keterlacakan)" testId="source-traceability">
           <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-3">{sourceTypeLabel[need.sourceType]}</p>
           <div className="mt-2"><SourceChip label={source.label} href={source.href} /></div>
-          <p className="mt-4 text-xs text-ink-3">Requirement tetap terhubung ke sumber aslinya meskipun position employee berubah.</p>
+          <p className="mt-4 text-xs text-ink-3">Requirement tetap terhubung ke sumber aslinya meskipun posisi karyawan berubah.</p>
         </Card>
-        <Card title="Linked training">
-          {linked.length ? <div className="flex flex-col items-start gap-2">{linked.map((item) => <SourceChip key={item.trainingId} label={item.activity} reference={item.status} href={`/training/${item.trainingId}`} />)}</div>
+        <Card title="Training terkait" testId="linked-training">
+          {linked.length ? <div className="flex flex-col items-start gap-2">{linked.map((item) => <SourceChip key={item.trainingId} label={item.activity} reference={statusLabel(item.status)} href={`/training/${item.trainingId}`} />)}</div>
             : <p className="text-sm text-ink-3">Belum ada training untuk requirement ini.</p>}
         </Card>
       </div>
@@ -115,9 +114,9 @@ export function DevelopmentHistoryPage({ needId }: { needId: string }) {
   const employee = need && employeeById(snapshot, need.employeeId);
   if (!need || !employee || !visibleEmployees(snapshot).some((item) => item.id === employee.id)) return <NotFound what="Development requirement" backHref="/development" backLabel="Kembali ke Development Requirement" />;
   return <>
-    <DetailHeader crumbs={[{ label: "HRMS" }, { label: "Development Requirement", href: "/development" }, { label: "History" }]} backHref={`/development/${need.needId}`}
+    <DetailHeader crumbs={[{ label: "HRMS" }, { label: "Development Requirement", href: "/development" }, { label: "Riwayat" }]} backHref={`/development/${need.needId}`}
       name={employee.fullName} meta={[need.objective]} status={need.status} />
-    <Card title="Revision history">
+    <Card title="Riwayat revisi" testId="revision-history">
       <Timeline empty="Belum ada revisi." entries={developmentHistory(snapshot, need.needId).map((item) => ({
         id: item.id, date: formatDate(item.createdAt), title: `Revisi ${item.revision}`, status: item.status, actor: item.actor, body: item.notes || undefined,
       }))} />
