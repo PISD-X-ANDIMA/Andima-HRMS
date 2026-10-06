@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowRightLeft, History, Save } from "lucide-react";
+import { ArrowRightLeft, FilePlus2, History, Save } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import type { CompetencyFinding, CompetencyOverallStatus } from "../../../competency/types";
 import type { EmployeeReference } from "../../../shared/types";
+import { openNeedFor } from "../../../shared/rules";
 import { useD4, useSnapshot } from "../../data/D4DataProvider";
 import { canWrite, currentGap, departmentOf, developmentNeeds, employeeById, formatDate, includesText, positionById, positionOf, positionOptions, today, visibleEmployees } from "../../data/selectors";
 import { DataTable, PersonCell } from "../../ui/DataTable";
@@ -11,6 +12,7 @@ import { FilterBar, FormError, FormModal, ModalActions, SearchInput, SelectField
 import { DetailHeader, NotFound, PageHeader, Timeline } from "../../ui/layout";
 import { RowActionMenu } from "../../ui/RowActionMenu";
 import { Button, ButtonLink, Card, cx, Notice, SourceChip, statusLabel, StatusBadge } from "../../ui/primitives";
+import { DevelopmentFormModal } from "../development/DevelopmentModals";
 
 type Row = { employee: EmployeeReference; position: string; status: CompetencyOverallStatus | "Belum Ada Posisi"; findings: CompetencyFinding[]; lastAssessed?: string };
 
@@ -32,9 +34,12 @@ function GapDelta({ finding }: { finding: CompetencyFinding }) {
 
 export function CompetencyListPage() {
   const snapshot = useSnapshot();
+  const writer = canWrite(snapshot);
+  const allNeeds = developmentNeeds(snapshot);
   const [search, setSearch] = useState("");
   const [position, setPosition] = useState("");
   const [status, setStatus] = useState("");
+  const [devFor, setDevFor] = useState<string | null>(null);
   const rows = useMemo<Row[]>(() => visibleEmployees(snapshot).map((employee) => {
     const gap = currentGap(snapshot, employee);
     const saved = snapshot.competency.filter((item) => item.employeeId === employee.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
@@ -62,7 +67,10 @@ export function CompetencyListPage() {
       ]}
       actions={(row) => <RowActionMenu label={`Aksi untuk ${row.employee.fullName}`} actions={[
         { label: "Lihat Riwayat", testId: "view-history", icon: <History />, href: `/competency/${row.employee.id}/history` },
+        { label: "Buat Development Requirement", testId: "create-development-requirement", icon: <FilePlus2 />, onSelect: () => setDevFor(row.employee.id),
+          hidden: !writer || row.status !== "Gap" || row.findings.filter((item) => item.status === "Gap").every((item) => openNeedFor(allNeeds, row.employee.id, "competency_gap", item.requirementId)) },
       ]} />} />
+    {devFor && <DevelopmentFormModal employeeId={devFor} sourceType="competency_gap" onClose={() => setDevFor(null)} />}
   </>;
 }
 
@@ -96,6 +104,7 @@ export function CompetencyDetailPage({ employeeId }: { employeeId: string }) {
   const snapshot = useSnapshot();
   const { run, busy } = useD4();
   const writer = canWrite(snapshot);
+  const [devRef, setDevRef] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
   const employee = employeeById(snapshot, employeeId);
   if (!employee || !visibleEmployees(snapshot).some((item) => item.id === employeeId)) return <NotFound what="Karyawan" backHref="/competency" backLabel="Kembali ke Competency Gap" />;
@@ -128,13 +137,15 @@ export function CompetencyDetailPage({ employeeId }: { employeeId: string }) {
               <td className="px-5 py-3"><GapDelta finding={finding} /></td>
               <td className="max-w-[280px] px-5 py-3 text-ink-2">{finding.evidenceNotes?.trim() || "Belum ada bukti"}</td>
               <td className="px-5 py-3"><StatusBadge status={finding.status} /></td>
-              <td className="px-5 py-3 text-right">{linked && (open || finding.status !== "Gap" || !writer) ? <SourceChip label="Development" reference={statusLabel(linked.status)} href={`/development/${linked.needId}`} /> : "—"}</td>
+              <td className="px-5 py-3 text-right">{linked && (open || finding.status !== "Gap" || !writer) ? <SourceChip label="Development" reference={statusLabel(linked.status)} href={`/development/${linked.needId}`} />
+                : finding.status === "Gap" && writer ? <Button variant="ghost" className="h-9" icon={<FilePlus2 className="size-4" />} onClick={() => setDevRef(finding.requirementId)} data-testid="btn-create-development-requirement">Buat Development Requirement</Button> : "—"}</td>
             </tr>;
           })}</tbody>
         </table>
         {!gap?.findings.length && <p className="px-5 py-10 text-center text-sm text-ink-3">{gap ? "Posisi ini belum memiliki requirement kompetensi." : "Karyawan belum memiliki posisi aktif."}</p>}
       </div>
     </Card>
+    {devRef && <DevelopmentFormModal employeeId={employee.id} sourceType="competency_gap" sourceRef={devRef} onClose={() => setDevRef(null)} />}
     {changing && <PositionChangeModal employee={employee} onClose={() => setChanging(false)} />}
   </>;
 }
