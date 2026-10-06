@@ -66,7 +66,7 @@ describe("saved scorecard total (fixture source, mirrors the DB trigger d4_calcu
     const lines = indicatorsFor(catalog, FINANCE_ROLE).map((row, index) => ({
       indicator_order: row.indicator_order, kpi_name: row.kpi_name, weight_percent: row.weight_percent, target: "", actual: "", raw_score: scores[index], comment: "",
     }));
-    const id = await source.createKpiAssessment({ employeeId: ALFA, roleOrder: FINANCE_ROLE, period, evaluationDate: `${period}-28`, evaluatorName: "x", status: "completed", lines, generalNotes: "" });
+    const id = await source.createKpiAssessment({ employeeId: ALFA, roleOrder: FINANCE_ROLE, period, evaluationDate: "2026-10-01", evaluatorName: "x", status: "completed", lines, generalNotes: "" });
     return (await source.loadSnapshot()).kpiAssessments!.find((item) => item.id === id)!.overallScore;
   }
 

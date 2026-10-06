@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isDevelopmentRollback, isTrainingRollback, localMonth, localToday, revisionNumber } from "@/modules/d4/shared/rules";
+import { assertNotFutureDate, isDevelopmentRollback, isTrainingRollback, localMonth, localToday, revisionNumber } from "@/modules/d4/shared/rules";
 import { assessableEmployees, canWrite, formatPeriod, formatResult, periodsOf, revisionTag, visibleEmployees } from "@/modules/d4/web/data/selectors";
 import type { DevelopmentStatus } from "@/modules/d4/development/types";
 import type { TrainingStatus } from "@/modules/d4/training/types";
@@ -97,5 +97,16 @@ describe("role views (fixture)", () => {
     expect(records.length).toBeGreaterThan(0);
     expect(records.every((item) => item.employeeId === ALFA)).toBe(true);
     await expect(source.createEvaluation({ employeeId: MERCURY, period: "2026-10", evaluationDate: "2026-10-01", evaluator: "x", status: "completed", reviewStatus: "Needs Review", overallScore: 4, aspects: [], generalNotes: "", evidenceReference: null })).rejects.toThrow(/Hanya HR/);
+  });
+});
+
+describe("future evaluation date", () => {
+  it("allows today and earlier, rejects tomorrow", () => {
+    const today = localToday();
+    const tomorrow = new Date(`${today}T12:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    expect(() => assertNotFutureDate(today)).not.toThrow();
+    expect(() => assertNotFutureDate("2020-01-01")).not.toThrow();
+    expect(() => assertNotFutureDate(tomorrow.toISOString().slice(0, 10))).toThrow(/melebihi hari ini/);
   });
 });
