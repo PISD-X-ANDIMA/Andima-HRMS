@@ -114,7 +114,7 @@ const evaluationBody = (patch: Record<string, unknown> = {}) => ({
 });
 const kpiBody = (patch: Record<string, unknown> = {}) => {
   const current = snapshot.kpiAssessments!.find((item) => item.id === KPI_ALFA)!;
-  return { employeeId: ALFA, roleOrder: current.roleOrder, period: "2026-10", evaluationDate: "2026-10-28", status: "completed",
+  return { employeeId: ALFA, roleOrder: current.roleOrder, period: "2026-10", evaluationDate: "2026-10-01", status: "completed",
     lines: current.lines.map((line) => ({ ...line, raw_score: 4 })), ...patch };
 };
 
