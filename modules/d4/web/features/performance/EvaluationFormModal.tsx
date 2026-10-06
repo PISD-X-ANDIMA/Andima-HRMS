@@ -28,7 +28,7 @@ export function EvaluationFormModal({ employeeId, onClose, onSaved }: { employee
   const [revise, setRevise] = useState(false);
   const selected = employeeById(snapshot, employee);
   const existing = employee && period ? latestForPeriod(snapshot.performance, employee, period) : undefined;
-  const missing = [!employee && "employee", !period && "periode", !date && "tanggal", score === null && "hasil evaluasi", !notes.trim() && "catatan evaluasi", existing && !revise && "konfirmasi revisi"].filter(Boolean);
+  const missing = [!employee && "karyawan", !period && "periode", !date && "tanggal", date > today() && "tanggal tidak melebihi hari ini", score === null && "hasil evaluasi", !notes.trim() && "catatan evaluasi", existing && !revise && "konfirmasi revisi"].filter(Boolean);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -42,23 +42,23 @@ export function EvaluationFormModal({ employeeId, onClose, onSaved }: { employee
     if (result.ok) { onSaved?.(result.value); onClose(); } else setError(result.error);
   }
 
-  return <FormModal title="Add Evaluation" description="Evaluasi baru disimpan sebagai riwayat periode; evaluasi periode sebelumnya tidak ditimpa." onClose={onClose}
-    footer={<ModalActions onCancel={onClose} busy={busy} submitLabel="Save Evaluation" />}>
+  return <FormModal title="Tambah Evaluasi" description="Evaluasi baru disimpan sebagai riwayat periode; evaluasi periode sebelumnya tidak ditimpa." onClose={onClose}
+    footer={<ModalActions onCancel={onClose} busy={busy} submitLabel="Simpan Evaluasi" />}>
     <form id="d4-modal-form" onSubmit={submit} noValidate className="space-y-5">
       <FormError message={error} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <SelectField label="Employee" required value={employee} onChange={(event) => setEmployee(event.target.value)} error={touched && !employee ? "Employee wajib dipilih." : undefined} className="sm:col-span-2">
-          <option value="">Select employee</option>
+        <SelectField label="Karyawan" testId="employee" required value={employee} onChange={(event) => setEmployee(event.target.value)} error={touched && !employee ? "Karyawan wajib dipilih." : undefined} className="sm:col-span-2">
+          <option value="">Pilih karyawan</option>
           {assessableEmployees(snapshot).map((item) => <option key={item.id} value={item.id}>{item.fullName} · {item.employeeId}</option>)}
         </SelectField>
-        <ReadOnlyField label="Position" value={positionOf(snapshot, selected)?.title ?? "—"} />
-        <ReadOnlyField label="Department" value={departmentOf(snapshot, selected)?.name ?? "—"} />
-        <TextField label="Period" required type="month" value={period} onChange={(event) => setPeriod(event.target.value)} error={touched && !period ? "Periode wajib dipilih." : undefined} />
-        <TextField label="Evaluation date" required type="date" value={date} onChange={(event) => setDate(event.target.value)} error={touched && !date ? "Tanggal wajib diisi." : undefined} />
-        <ReadOnlyField label="Evaluator" value={evaluator || "—"} />
+        <ReadOnlyField label="Posisi" testId="position" value={positionOf(snapshot, selected)?.title ?? "—"} />
+        <ReadOnlyField label="Departemen" testId="department" value={departmentOf(snapshot, selected)?.name ?? "—"} />
+        <TextField label="Periode" testId="period" required type="month" value={period} onChange={(event) => setPeriod(event.target.value)} error={touched && !period ? "Periode wajib dipilih." : undefined} />
+        <TextField label="Tanggal evaluasi" testId="evaluation-date" required type="date" max={today()} value={date} onChange={(event) => setDate(event.target.value)} error={touched && !date ? "Tanggal wajib diisi." : touched && date > today() ? "Tidak boleh melebihi hari ini." : undefined} />
+        <ReadOnlyField label="Penilai" testId="evaluator" value={evaluator || "—"} />
         <SelectField label="Hasil evaluasi" required value={score ?? ""} onChange={(event) => setScore(event.target.value ? Number(event.target.value) : null)}
-          error={touched && score === null ? "Hasil evaluasi wajib dipilih." : undefined} helper="Skala 1–5 mengikuti label KPI Scorecard V5.1. Diisi evaluator; tidak memicu keputusan HR otomatis.">
-          <option value="">Select result</option>
+          error={touched && score === null ? "Hasil evaluasi wajib dipilih." : undefined} helper="Skala 1–5 mengikuti label KPI Scorecard V5.1. Diisi penilai; tidak memicu keputusan HR otomatis.">
+          <option value="">Pilih hasil</option>
           {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} · {SCORE_LABELS[value]}</option>)}
         </SelectField>
       </div>
@@ -66,7 +66,7 @@ export function EvaluationFormModal({ employeeId, onClose, onSaved }: { employee
         error={touched && !revise ? "Centang untuk menyimpan sebagai revisi, atau ganti periode." : undefined} />}
       <TextAreaField label="Catatan evaluasi" required value={notes} onChange={(event) => setNotes(event.target.value)} error={touched && !notes.trim() ? "Catatan evaluasi wajib diisi." : undefined}
         helper={existing ? "Untuk revisi, tuliskan juga alasan revisinya." : "Termasuk rekomendasi/rencana pelatihan bila ada — dapat dipakai sebagai konteks Development Requirement."} />
-      <TextField label="Evidence / reference" value={evidence} onChange={(event) => setEvidence(event.target.value)} helper="Opsional: nomor dokumen atau tautan bukti." />
+      <TextField label="Bukti / referensi" testId="evidence-reference" value={evidence} onChange={(event) => setEvidence(event.target.value)} helper="Opsional: nomor dokumen atau tautan bukti." />
     </form>
   </FormModal>;
 }

@@ -22,7 +22,7 @@ afterEach(() => { vi.useRealTimers(); });
 async function kpiDraft(employeeId: string, period: string, patch: Partial<KpiAssessmentDraft> = {}): Promise<KpiAssessmentDraft> {
   const snapshot = await source.loadSnapshot();
   const current = snapshot.kpiAssessments!.find((item) => item.employeeId === ALFA)!;
-  return { employeeId, roleOrder: current.roleOrder, period, evaluationDate: `${period}-28`, evaluatorName: "x", status: "completed",
+  return { employeeId, roleOrder: current.roleOrder, period, evaluationDate: "2026-10-01", evaluatorName: "x", status: "completed",
     lines: current.lines.map((line) => ({ ...line, raw_score: 4 })), generalNotes: "", ...patch };
 }
 
