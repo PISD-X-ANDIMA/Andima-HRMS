@@ -4,7 +4,7 @@ import { indicatorsFor, KPI_V51_CATALOG, roleForPositionTitle, selectCatalog } f
 import { performanceFixtureRecords } from "../../performance/fixtures";
 import { validatePerformanceInput } from "../../performance/validation";
 import { d4ReferenceFixture } from "../../shared/fixtures";
-import { assertDevelopmentChange, assertNeedOpen, assertNoOpenNeed, assertNotSelf, assertPeriodRevision, assertRevisionReason, assertTrainingChange, assertTrainingDate, isTeamMember } from "../../shared/rules";
+import { assertDevelopmentChange, assertNeedOpen, assertNoOpenNeed, assertNotFutureDate, assertNotSelf, assertPeriodRevision, assertRevisionReason, assertTrainingChange, assertTrainingDate, isTeamMember } from "../../shared/rules";
 import type { D4LiveSnapshot, KpiAssessment, KpiAssessmentLine } from "../../supabase/types";
 import { latestDevelopment, latestTraining } from "../../supabase/types";
 import { trainingFixtureVersions } from "../../training/fixtures";
@@ -120,6 +120,7 @@ export function createLocalSource({ mode, initial, persist }: { mode: "fixture" 
       validatePerformanceInput(input);
       assertNotSelf(state.actorEmployeeId, input.employeeId);
       assertTeam(input.employeeId);
+      assertNotFutureDate(input.evaluationDate);
       assertPeriodRevision(state.performance, input.employeeId, input.period, revisionOf, "Evaluasi");
       assertRevisionReason(revisionOf, input.generalNotes);
       const id = newId("FIX-D4-PERF");
@@ -131,6 +132,7 @@ export function createLocalSource({ mode, initial, persist }: { mode: "fixture" 
       const input = { ...draft, evaluatorName: actorName() };
       assertNotSelf(state.actorEmployeeId, input.employeeId);
       assertTeam(input.employeeId);
+      assertNotFutureDate(input.evaluationDate);
       assertPeriodRevision(state.kpiAssessments ?? [], input.employeeId, input.period, revisionOf, "Scorecard");
       assertRevisionReason(revisionOf, input.generalNotes);
       const indicators = indicatorsFor(catalog, input.roleOrder);
