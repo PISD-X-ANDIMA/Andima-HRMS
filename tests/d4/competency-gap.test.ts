@@ -43,9 +43,9 @@ describe("competency gap is not resolved automatically", () => {
   it("stays Gap after training and the requirement are Completed and good scores are saved, and a new snapshot still shows Gap", async () => {
     await source.updateTraining("FIX-D4-TRN-001", "Completed", "Lulus workshop", "");
     await source.updateDevelopment("FIX-D4-DEV-001", "Completed", "Training selesai");
-    await source.createEvaluation({ employeeId: ALFA, period: "2026-11", evaluationDate: "2026-11-28", evaluator: "x", status: "completed", reviewStatus: "Needs Review", overallScore: 5, aspects: [], generalNotes: "Sangat baik.", evidenceReference: null });
+    await source.createEvaluation({ employeeId: ALFA, period: "2026-11", evaluationDate: "2026-10-01", evaluator: "x", status: "completed", reviewStatus: "Needs Review", overallScore: 5, aspects: [], generalNotes: "Sangat baik.", evidenceReference: null });
     const lines = indicatorsFor(selectCatalog(KPI_V51_CATALOG), 10).map((row) => ({ indicator_order: row.indicator_order, kpi_name: row.kpi_name, weight_percent: row.weight_percent, target: "", actual: "", raw_score: 5, comment: "" }));
-    await source.createKpiAssessment({ employeeId: ALFA, roleOrder: 10, period: "2026-11", evaluationDate: "2026-11-28", evaluatorName: "x", status: "completed", lines, generalNotes: "" });
+    await source.createKpiAssessment({ employeeId: ALFA, roleOrder: 10, period: "2026-11", evaluationDate: "2026-10-01", evaluatorName: "x", status: "completed", lines, generalNotes: "" });
 
     const snapshot = await source.loadSnapshot();
     expect(latestTraining(snapshot).find((item) => item.trainingId === "FIX-D4-TRN-001")?.status).toBe("Completed");

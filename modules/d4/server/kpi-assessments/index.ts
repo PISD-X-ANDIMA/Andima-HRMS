@@ -1,6 +1,6 @@
 import { indicatorsFor, roleForPositionTitle, selectCatalog, type RoleKpiRow } from "../../kpi/catalog";
 import type { KpiAssessmentLine } from "../../supabase/types";
-import { assertNotSelf, assertPeriodRevision, assertRevisionReason } from "../../shared/rules";
+import { assertNotFutureDate, assertNotSelf, assertPeriodRevision, assertRevisionReason } from "../../shared/rules";
 import { databaseError } from "../../shared/errors";
 import { ApiError, employeeFilter, enforce, field, optionalUuid, readJson } from "../_lib/http";
 import { d4Session, requireWriter } from "../_lib/session";
@@ -63,10 +63,12 @@ export async function createAssessment(request: Request) {
       raw_score: score, comment: field.text(raw, "comment", { required: false, max: 500 }),
     };
   });
+  const evaluationDate = field.date(body, "evaluationDate", { required: status === "completed" });
+  enforce(() => assertNotFutureDate(evaluationDate));
   const id = await repository.saveKpiAssessment({
     definitionVersion: catalog.version,
     employeeId, roleOrder, roleName: indicators[0].role_name,
-    period, evaluationDate: field.date(body, "evaluationDate", { required: status === "completed" }),
+    period, evaluationDate,
     evaluatorName,
     status, lines, generalNotes,
   });
