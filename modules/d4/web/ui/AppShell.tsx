@@ -14,6 +14,7 @@ export const D4_MENU = [
   { href: "/kpi", label: "KPI Scorecard" },
   { href: "/competency", label: "Competency Gap" },
   { href: "/development", label: "Development Requirement" },
+  { href: "/training", label: "Training Tracking" },
 ] as const;
 
 // The Dashboard link appears once the People Dashboard route ships.
