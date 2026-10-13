@@ -1,111 +1,300 @@
-"use client";
+'use client';
 
-import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
-
-type Notice = { tone: "error" | "success"; text: string } | null;
+import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/utils/supabase/client';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [notice, setNotice] = useState<Notice>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [greeting, setGreeting] = useState("Good Morning");
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [isSigningIn, setIsSigningIn] = useState<boolean>(false);
+  const [loginAttempts, setLoginAttempts] = useState<number>(0);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [isPermanentlyBlocked, setIsPermanentlyBlocked] = useState<boolean>(false);
+  const [countdown, setCountdown] = useState<number>(0);
+  const [greeting] = useState<string>(() => {
+    const hour = new Date().getHours();
+    return hour >= 3 && hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
+  });
 
   useEffect(() => {
-    const hour = new Date().getHours();
-    setGreeting(hour >= 3 && hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening");
-  }, []);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    if (isLocked && countdown > 0) {
+      timer = setInterval(() => setCountdown((prev) => prev - 1), 1000);
+    } else if (countdown === 0 && isLocked && !isPermanentlyBlocked) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsLocked(false);
+      setErrorMessage('');
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isLocked, countdown, isPermanentlyBlocked]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setNotice(null);
-    if (!email.trim() || !password) {
-      setNotice({ tone: "error", text: "Email dan password wajib diisi." });
+  const validateEmailFormat = (emailVal: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(emailVal);
+  };
+
+  const handleFailedAttempt = (customMessage: string) => {
+    const newAttempts = loginAttempts + 1;
+    setLoginAttempts(newAttempts);
+
+    if (newAttempts >= 5) {
+      setIsLocked(true);
+      setIsPermanentlyBlocked(true);
+      setErrorMessage('Your account has been blocked. Please contact the IT administrator.');
+    } else if (newAttempts === 4) {
+      setErrorMessage(
+        `${customMessage} Warning: 1 more failed attempt will block your account!`
+      );
+    } else if (newAttempts === 3) {
+      setIsLocked(true);
+      setCountdown(30);
+      setErrorMessage(
+        'Too many failed login attempts (3/5). Please wait 30 seconds before trying again.'
+      );
+    } else {
+      setErrorMessage(`${customMessage} (Remaining attempts: ${5 - newAttempts})`);
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (isLocked || isPermanentlyBlocked) return;
+
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage('Email and Password are required.');
       return;
     }
 
-    setIsSubmitting(true);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!validateEmailFormat(normalizedEmail)) {
+      setErrorMessage('Invalid email format (example: name@andima.co.id).');
+      return;
+    }
+
+    setIsSigningIn(true);
     try {
       const supabase = createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+
       if (error || !data.user) {
-        setNotice({ tone: "error", text: "Email atau password tidak sesuai." });
+        handleFailedAttempt('Email atau password salah.');
         return;
       }
 
       const { data: access, error: accessError } = await supabase
-        .from("d3_user_access")
-        .select("app_role")
-        .eq("auth_user_id", data.user.id)
+        .from('d3_user_access')
+        .select('app_role')
+        .eq('auth_user_id', data.user.id)
         .maybeSingle();
 
-      if (accessError || !access) {
-        await supabase.auth.signOut();
-        setNotice({ tone: "error", text: "Akun ini belum dipetakan ke akses HRMS D3. Hubungi HR Admin." });
+      if (!accessError && access) {
+        setLoginAttempts(0);
+        setSuccessMessage('Login berhasil. Mengarahkan ke workspace Anda...');
+        window.setTimeout(() => {
+          router.replace(access.app_role === 'EMPLOYEE' ? '/face-biometric-attendance' : '/employee-report-ticket?view=manager');
+          router.refresh();
+        }, 700);
         return;
       }
 
-      const isEmployee = access.app_role === "EMPLOYEE";
-      setNotice({ tone: "success", text: "Login berhasil. Mengarahkan ke workspace Anda..." });
-      window.setTimeout(() => {
-        router.replace(isEmployee ? "/face-biometric-attendance" : "/employee-report-ticket?view=manager");
-        router.refresh();
-      }, 700);
+      const { data: registeredUser, error: registerError } = await supabase
+        .from('b2_register')
+        .select('id, is_active')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+
+      if (!registerError && registeredUser && registeredUser.is_active !== false) {
+        setLoginAttempts(0);
+        setSuccessMessage('Login berhasil. Mengarahkan ke halaman utama...');
+        window.setTimeout(() => {
+          router.replace('/home');
+          router.refresh();
+        }, 700);
+        return;
+      }
+
+      if (registerError) {
+        await supabase.auth.signOut();
+        setErrorMessage('Akun berhasil login, tetapi data registrasinya belum dapat dibaca.');
+        return;
+      }
+
+      await supabase.auth.signOut();
+      setErrorMessage('Akun ini belum dipetakan ke akses HRMS atau data registrasi. Hubungi HR Admin.');
     } catch {
-      setNotice({ tone: "error", text: "Koneksi login belum siap. Periksa .env.local lalu coba kembali." });
+      setErrorMessage('Koneksi login belum siap. Periksa .env.local lalu coba kembali.');
     } finally {
-      setIsSubmitting(false);
+      setIsSigningIn(false);
     }
-  }
+  };
 
   return (
-    <main className="relative min-h-screen w-full overflow-x-hidden bg-[#07111f] text-[#0d1b2a] selection:bg-[#3b6ff5] selection:text-white">
+    <main className="relative min-h-screen w-full overflow-x-hidden bg-[#07111F] text-[#0D1B2A] selection:bg-[#3B6FF5] selection:text-white font-[family-name:var(--font-montserrat)]">
+      {/* 1. BACKGROUND GAMBAR LOGISTIK FULL SCREEN */}
       <div className="absolute inset-0 z-0">
-        <img src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=1600&auto=format&fit=crop" alt="Operasional logistik Andima" className="h-full w-full object-cover object-right opacity-60" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#0d1b2a] via-[#0d1b2a]/85 via-40% to-transparent" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#07111f] via-transparent to-transparent" />
+        <img
+          src="https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=1600&auto=format&fit=crop"
+          alt="Cargo Ship Logistics"
+          className="w-full h-full object-cover object-right opacity-60"
+        />
+        {/* Soft Blending Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0D1B2A] via-[#0D1B2A]/85 via-40% to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07111F] via-transparent to-transparent pointer-events-none" />
       </div>
-      <div className="pointer-events-none absolute -left-20 -top-20 z-0 h-96 w-96 rounded-full bg-[#18c7c0]/30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-20 left-1/3 z-0 h-96 w-96 rounded-full bg-[#3b6ff5]/30 blur-3xl" />
 
-      <aside className="pointer-events-none absolute right-8 top-1/2 z-20 hidden max-w-lg -translate-y-1/2 flex-col items-end text-right md:flex lg:right-16 xl:right-24">
-        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Logo-ANDIMA-wzx4gpZx20EFE5IYcH3jqabixELIo3.png" alt="Logo Andima" className="mb-4 w-32 object-contain drop-shadow-lg sm:w-40 lg:w-48" />
-        <h1 className="text-2xl font-extrabold leading-tight tracking-wider text-white drop-shadow-md sm:text-3xl lg:text-4xl">PT. ANDIMA<br />TRANSPORTINDO</h1>
-      </aside>
+      {/* Ambient Light Glows */}
+      <div className="absolute -top-20 -left-20 w-96 h-96 bg-[#18C7C0]/30 rounded-full blur-3xl pointer-events-none z-0" />
+      <div className="absolute -bottom-20 left-1/3 w-96 h-96 bg-[#3B6FF5]/30 rounded-full blur-3xl pointer-events-none z-0" />
 
-      <section className="relative z-10 flex min-h-screen w-full items-center justify-start px-6 py-8 sm:px-12 lg:px-20">
+      {/* 2. BRAND TEXT (TITLE) MENGGUNAKAN FONT SYNE */}
+      <div className="hidden md:flex absolute top-1/2 -translate-y-1/2 right-8 lg:right-16 xl:right-24 z-20 pointer-events-none flex-col items-end text-right max-w-lg">
+        <div className="w-14 h-14 lg:w-16 lg:h-16 rounded-2xl flex items-center justify-center text-white font-bold shadow-xl shadow-[#3B6FF5]/30 bg-[#3B6FF5] shrink-0 mb-4">
+          <svg className="w-8 h-8 lg:w-9 lg:h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457-.39-2.823-1.07-4" />
+          </svg>
+        </div>
+        <h1 className="font-[family-name:var(--font-syne)] text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-wider text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.9)] leading-tight">
+          PT. ANDIMA<br />
+          <span className="font-[family-name:var(--font-syne)] text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-wider text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.9)] leading-tight">TRANSPORTINDO</span>
+        </h1>
+      </div>
+
+      {/* 3. FORM LOGIN CONTAINER */}
+      <div className="relative z-10 min-h-screen w-full flex items-center justify-start px-6 py-8 sm:px-12 lg:px-20">
         <div className="w-full max-w-xl">
-          <div className="relative overflow-hidden rounded-3xl border border-white/80 bg-gradient-to-b from-white/85 via-white/70 to-white/60 p-8 shadow-[0_20px_50px_rgba(7,17,31,0.5),inset_0_2px_4px_rgba(255,255,255,0.9)] backdrop-blur-2xl sm:p-11">
-            <div className="pointer-events-none absolute -top-24 left-1/2 h-32 w-3/4 -translate-x-1/2 rounded-full bg-gradient-to-b from-white/80 to-transparent blur-md" />
-            <div className="relative z-10 mb-7 text-left">
-              <h2 className="text-xl font-bold tracking-tight text-[#0d1b2a] sm:text-2xl">{greeting},</h2>
-              <p className="mt-1.5 text-sm font-medium text-[#334155]">Please sign in with your registered account to access the dashboard.</p>
+
+          {/* FRAME LIQUID GLASS (GLASSMORPHISM ADVANCED) */}
+          <div className="p-8 sm:p-11 rounded-3xl bg-gradient-to-b from-white/85 via-white/70 to-white/60 backdrop-blur-2xl border border-white/80 shadow-[0_20px_50px_rgba(7,17,31,0.5),inset_0_2px_4px_rgba(255,255,255,0.9)] relative overflow-hidden">
+
+            {/* Top Liquid Highlight Specular Glow */}
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-gradient-to-b from-white/80 to-transparent blur-md pointer-events-none rounded-full" />
+
+            {/* Greeting */}
+            <div className="mb-7 text-left relative z-10">
+              <h2 className="font-[family-name:var(--font-syne)] text-xl sm:text-2xl font-bold text-[#0D1B2A] tracking-tight">
+                {greeting},
+              </h2>
+              <p className="font-[family-name:var(--font-montserrat)] text-sm text-[#334155] mt-1.5 font-medium">
+                Please sign in with your registered account to access the dashboard.
+              </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="relative z-10 space-y-6" noValidate>
-              <label className="block"><span className="mb-2.5 block text-xs font-bold uppercase tracking-wider text-[#0f172a]">Username / Email</span><input type="email" placeholder="name@andima.co.id" value={email} onChange={(event) => setEmail(event.target.value)} disabled={isSubmitting} className="w-full rounded-xl border border-white/90 bg-white/70 px-4 py-3.5 text-sm font-medium text-[#0d1b2a] placeholder-[#64748b] shadow-[inset_0_2px_4px_rgba(0,0,0,0.04)] backdrop-blur-md transition-all focus:border-[#3b6ff5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3b6ff5]/30 disabled:opacity-50" /></label>
-              <label className="block"><span className="mb-2.5 block text-xs font-bold uppercase tracking-wider text-[#0f172a]">Password</span><span className="relative block"><input type={showPassword ? "text" : "password"} placeholder="••••••••••••" value={password} onChange={(event) => setPassword(event.target.value)} disabled={isSubmitting} className="w-full rounded-xl border border-white/90 bg-white/70 py-3.5 pl-4 pr-12 text-sm font-medium text-[#0d1b2a] placeholder-[#64748b] shadow-[inset_0_2px_4px_rgba(0,0,0,0.04)] backdrop-blur-md transition-all focus:border-[#3b6ff5] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#3b6ff5]/30 disabled:opacity-50" /><button type="button" onPointerDown={() => setShowPassword(true)} onPointerUp={() => setShowPassword(false)} onPointerLeave={() => setShowPassword(false)} disabled={isSubmitting} className="absolute right-4 top-1/2 -translate-y-1/2 p-1 text-[#64748b] transition-colors hover:text-[#3b6ff5] disabled:opacity-50" aria-label="Tahan untuk melihat password"><EyeIcon hidden={!showPassword} /></button></span></label>
-              {notice && <NoticeBanner notice={notice} />}
-              <button type="submit" disabled={isSubmitting} className="mt-2 w-full rounded-xl bg-[#3b6ff5] px-5 py-4 text-sm font-extrabold tracking-wider text-white shadow-[0_8px_25px_rgba(59,111,245,0.4)] transition-all hover:bg-[#2b5ce5] active:scale-[0.99] disabled:cursor-wait disabled:opacity-50">{isSubmitting ? "SIGNING IN…" : "LOGIN"}</button>
+            {/* Form Fields */}
+            <form onSubmit={handleSubmit} className="space-y-6 font-[family-name:var(--font-montserrat)] relative z-10" noValidate>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#0F172A] mb-2.5">
+                  Username
+                </label>
+                <input
+                  type="email"
+                  placeholder="manajemen@andima.co.id"
+                  value={email}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                  disabled={isLocked || isPermanentlyBlocked}
+                  className="w-full px-4.5 py-3.5 rounded-xl bg-white/70 backdrop-blur-md text-[#0D1B2A] placeholder-[#64748B] text-sm focus:outline-none transition-all disabled:opacity-50 border border-white/90 shadow-[inset_0_2px_4px_rgba(0,0,0,0.04)] focus:bg-white focus:border-[#3B6FF5] focus:ring-2 focus:ring-[#3B6FF5]/30 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#0F172A] mb-2.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••••••"
+                    value={password}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                    disabled={isLocked || isPermanentlyBlocked}
+                    className="w-full pl-4.5 pr-12 py-3.5 rounded-xl bg-white/70 backdrop-blur-md text-[#0D1B2A] placeholder-[#64748B] text-sm focus:outline-none transition-all disabled:opacity-50 border border-white/90 shadow-[inset_0_2px_4px_rgba(0,0,0,0.04)] focus:bg-white focus:border-[#3B6FF5] focus:ring-2 focus:ring-[#3B6FF5]/30 font-medium"
+                  />
+
+                  <button
+                    type="button"
+                    onMouseDown={() => setShowPassword(true)}
+                    onMouseUp={() => setShowPassword(false)}
+                    onMouseLeave={() => setShowPassword(false)}
+                    onTouchStart={() => setShowPassword(true)}
+                    onTouchEnd={() => setShowPassword(false)}
+                    disabled={isLocked || isPermanentlyBlocked}
+                    tabIndex={-1}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#3B6FF5] p-1 transition-colors disabled:opacity-50"
+                  >
+                    {showPassword ? (
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908A8.982 8.982 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21M3 3l18 18" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {errorMessage && (
+                <div className="p-4 rounded-xl bg-[#DC2626]/10 border border-[#DC2626]/30 text-[#DC2626] text-xs sm:text-sm flex items-center gap-2.5 font-semibold backdrop-blur-md">
+                  <svg className="w-5 h-5 shrink-0 fill-current" viewBox="0 0 20 20">
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" />
+                  </svg>
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {successMessage && (
+                <div className="p-4 rounded-xl bg-[#059669]/10 border border-[#059669]/30 text-[#059669] text-xs sm:text-sm flex items-center gap-2.5 font-semibold backdrop-blur-md">
+                  <svg className="w-5 h-5 shrink-0 fill-current" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span>{successMessage}</span>
+                </div>
+              )}
+
+              {/* Tombol Login Solid Blue #3B6FF5 dengan Hover #2B5CE5 */}
+              <button
+                type="submit"
+                disabled={isLocked || isPermanentlyBlocked || isSigningIn}
+                className="w-full py-4 px-5 text-white font-extrabold rounded-xl text-sm tracking-wider uppercase transition-all mt-2 disabled:opacity-50 bg-[#3B6FF5] hover:bg-[#2B5CE5] shadow-[0_8px_25px_rgba(59,111,245,0.4)] active:scale-[0.99] cursor-pointer disabled:cursor-not-allowed font-[family-name:var(--font-montserrat)]"
+              >
+                {isPermanentlyBlocked
+                  ? 'ACCOUNT BLOCKED'
+                  : isLocked
+                  ? `Please wait ${countdown}s`
+                  : isSigningIn ? 'SIGNING IN…' : 'LOGIN'}
+              </button>
             </form>
-            <p className="relative z-10 mt-4 text-center text-sm text-[#334155]">Not registered? <Link href="/register" className="font-bold text-[#3b6ff5] hover:underline">Register</Link></p>
+
+            <p className="relative z-10 mt-4 text-center text-sm text-[#334155]">
+              Not login ?{' '}
+              <Link href="/register" className="font-bold text-[#3B6FF5] hover:underline">Register</Link>
+            </p>
+
+            {/* Info Demo Credentials */}
+            <div className="mt-7 p-4 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs text-[#334155] space-y-1 font-[family-name:var(--font-montserrat)] shadow-sm relative z-10">
+              <p className="font-bold text-[#3B6FF5]">Demo Credentials:</p>
+              <p>Login menggunakan akun HRMS yang sudah dipetakan oleh HR Admin.</p>
+            </div>
           </div>
+
         </div>
-      </section>
+      </div>
     </main>
   );
-}
-
-function EyeIcon({ hidden }: { hidden: boolean }) {
-  return hidden ? <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 4.3A10.8 10.8 0 0112 4.1c4.5 0 8.3 3 9.6 7.9a10.4 10.4 0 01-3.2 4.8M6.2 6.2A10.3 10.3 0 002.4 12C3.7 16.9 7.5 19.9 12 19.9c1.1 0 2.1-.2 3.1-.5" /></svg> : <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.5 12C3.8 7.9 7.5 5 12 5s8.2 2.9 9.5 7c-1.3 4.1-5 7-9.5 7s-8.2-2.9-9.5-7z" /></svg>;
-}
-
-function NoticeBanner({ notice }: { notice: Exclude<Notice, null> }) {
-  const isSuccess = notice.tone === "success";
-  return <p role={isSuccess ? "status" : "alert"} className={`rounded-xl border p-4 text-sm font-semibold ${isSuccess ? "border-[#059669]/30 bg-[#059669]/10 text-[#059669]" : "border-[#dc2626]/30 bg-[#dc2626]/10 text-[#dc2626]"}`}>{notice.text}</p>;
 }
