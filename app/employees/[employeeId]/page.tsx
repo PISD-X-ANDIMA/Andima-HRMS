@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Link2, Mail, MapPin, Phone } from "lucide-react";
+import EmployeeDirectoryVisibilityButton from "@/components/EmployeeDirectoryVisibilityButton";
 import HrmsShell from "@/components/hrms/HrmsShell";
 import HrmsStatusPill from "@/components/hrms/HrmsStatusPill";
 import type {
@@ -72,7 +73,7 @@ function ProfileSection({ title, children, className = "" }: { title: string; ch
 }
 
 function EmptyState({ children = "Belum tersedia" }: { children?: React.ReactNode }) {
-  return <p className="text-sm text-slate-500">{children}</p>;
+  return <div className="flex items-center gap-3 rounded-lg border border-dashed border-[#D9E2FC] bg-[#F7F9FC] px-4 py-4 text-sm text-slate-500"><span className="flex size-8 items-center justify-center rounded-full bg-[#EEF4FF] text-[#155DFC]" aria-hidden="true">○</span><span>{children}</span></div>;
 }
 
 function logRelatedQueryError(source: string, error: { code: string; message: string }) {
@@ -139,6 +140,60 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
     );
   }
 
+  const { data: b2Source, error: b2SourceError } = await supabase
+    .from("d3_b2_employee_sources")
+    .select("employee_id")
+    .eq("employee_id", employee.id)
+    .maybeSingle();
+
+  if (b2SourceError) {
+    console.error("Employee profile B2 source query failed", {
+      code: b2SourceError.code,
+      message: b2SourceError.message,
+    });
+
+    return (
+      <HrmsShell userEmail={user.email} userRole={userRole}>
+        <section className="mx-auto max-w-7xl rounded-xl border border-red-200 bg-white p-6 text-red-700 shadow-sm">
+          <h1 className="text-xl font-bold">Employee Profile</h1>
+          <p className="mt-2">Sumber data employee belum dapat diverifikasi. Silakan coba lagi nanti.</p>
+          <Link className="mt-4 inline-block text-sm font-semibold text-[#1E3765] hover:text-[#0F2342]" href="/employees">
+            ← Employee Directory
+          </Link>
+        </section>
+      </HrmsShell>
+    );
+  }
+
+  if (!b2Source) {
+    return (
+      <HrmsShell userEmail={user.email} userRole={userRole}>
+        <section className="mx-auto max-w-7xl rounded-xl border border-[#D9E2FC] bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-bold text-[#121B2E]">Employee Profile</h1>
+          <p className="mt-2 text-slate-600">Data employee ini bukan berasal dari registrasi B2.</p>
+          <Link className="mt-4 inline-block text-sm font-semibold text-[#1E3765] hover:text-[#0F2342]" href="/employees">
+            ← Employee Directory
+          </Link>
+        </section>
+      </HrmsShell>
+    );
+  }
+
+  let isHiddenFromDirectory = false;
+  if (canManageEmployees) {
+    const { data: visibility, error: visibilityError } = await supabase
+      .from("d3_employee_directory_hidden")
+      .select("employee_id")
+      .eq("employee_id", employee.id)
+      .maybeSingle();
+
+    if (visibilityError) {
+      logRelatedQueryError("d3_employee_directory_hidden", visibilityError);
+    } else {
+      isHiddenFromDirectory = Boolean(visibility);
+    }
+  }
+
   const [skillsResult, certificationsResult, attendancesResult, feedbackRewardsResult] = await Promise.all([
     supabase
       .from("d3_employee_skills")
@@ -191,16 +246,17 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Link className="text-sm font-semibold text-[#1E3765] transition hover:text-[#155DFC]" href="/employees">← Employee Directory</Link>
-            <h1 className="mt-4 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Employee Profile</h1>
+            <h1 className="mt-4 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Profil Pegawai</h1>
           </div>
           {canManageEmployees && (
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
               <Link className="inline-flex h-11 items-center justify-center rounded-[15px] border border-[#155DFC] bg-[#EEF4FF] px-5 text-sm font-bold text-[#155DFC] transition hover:bg-[#DCE8FF]" href={`/employees/${encodeURIComponent(employee.employee_id)}/edit`}>
-                Edit Profile
+                Edit Profil
               </Link>
               <Link className="inline-flex h-11 items-center justify-center rounded-[15px] bg-[#155DFC] px-5 text-sm font-bold text-white shadow-[3px_3px_14px_rgba(87,138,252,0.4)] transition hover:bg-[#0D4FDB]" href={`/employees/${encodeURIComponent(employee.employee_id)}/status`}>
-                Ubah Employment Status
+                Ubah Status
               </Link>
+              <EmployeeDirectoryVisibilityButton employeeUuid={employee.id} initiallyHidden={isHiddenFromDirectory} />
             </div>
           )}
         </div>
@@ -215,10 +271,10 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
                   <HrmsStatusPill value={employee.employment_status} />
                 </div>
                 <p className="mt-2 text-base font-medium text-[#1E3765]">{[employee.position_title, employee.department_name, employee.work_location].filter(Boolean).join(" · ") || "Belum tersedia"}</p>
-                <p className="mt-3 text-sm font-semibold text-[#121B2E]">{employee.employee_id} <span className="px-1.5 text-[#577CFC]">·</span> Joined {formatDate(employee.join_date)} <span className="px-1.5 text-[#577CFC]">·</span> Tenure: {tenure}</p>
+                <p className="mt-3 text-sm font-semibold text-[#121B2E]">ID {employee.employee_id} <span className="px-1.5 text-[#577CFC]">·</span> Bergabung {formatDate(employee.join_date)} <span className="px-1.5 text-[#577CFC]">·</span> Masa kerja {tenure}</p>
                 <p className="mt-4 flex max-w-2xl items-start gap-2 rounded-lg border border-[#D9E2FC] bg-[#F5F8FF] px-3 py-2 text-xs leading-5 text-[#1E3765]">
                   <Link2 className="mt-0.5 size-4 shrink-0 text-[#155DFC]" aria-hidden="true" />
-                  Attendance, certification, feedback, and reward data are linked through this Employee ID.
+                  Data kehadiran, sertifikasi, feedback, dan reward terhubung melalui Employee ID ini.
                 </p>
               </div>
             </div>
@@ -226,7 +282,7 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
         </header>
 
         <div className="grid gap-5 lg:grid-cols-2 xl:gap-6">
-          <ProfileSection title="Contact Information">
+          <ProfileSection title="Informasi Kontak">
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               <div className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#155DFC]/10 text-[#155DFC]"><Mail className="size-4" aria-hidden="true" /></span><div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Email</dt><dd className="mt-0.5 break-all text-sm font-semibold text-[#121B2E]">{displayValue(employee.email)}</dd></div></div>
               <div className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#155DFC]/10 text-[#155DFC]"><Phone className="size-4" aria-hidden="true" /></span><div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Phone</dt><dd className="mt-0.5 text-sm font-semibold text-[#121B2E]">{displayValue(employee.phone)}</dd></div></div>
@@ -235,8 +291,8 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
             </dl>
           </ProfileSection>
 
-          <ProfileSection title="Skill &amp; Competency">
-            {skills.length === 0 ? <EmptyState>No skill data available.</EmptyState> : (
+          <ProfileSection title="Skill &amp; Kompetensi">
+            {skills.length === 0 ? <EmptyState>Belum ada data skill atau kompetensi.</EmptyState> : (
               <div className="flex flex-wrap gap-2">
                 {skills.map((skill) => (
                   <span className="inline-flex max-w-full items-center rounded-full border border-[#577CFC]/45 bg-[#155DFC]/10 px-3 py-1.5 text-xs font-bold text-[#1E3765]" key={skill.competency_id} title={skill.evidence_notes || undefined}>
@@ -247,8 +303,8 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
             )}
           </ProfileSection>
 
-          <ProfileSection title="Certification">
-            {certifications.length === 0 ? <EmptyState>Belum tersedia</EmptyState> : (
+          <ProfileSection title="Sertifikasi">
+            {certifications.length === 0 ? <EmptyState>Belum ada data sertifikasi.</EmptyState> : (
               <div className="space-y-3">
                 {certifications.map((certification, index) => (
                   <article className="flex flex-col gap-3 border-b border-[#D9E2FC] pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between" key={`${certification.credential_id ?? certification.title ?? "certification"}-${index}`}>
@@ -260,14 +316,14 @@ export default async function EmployeeProfilePage({ params }: EmployeeProfilePag
             )}
           </ProfileSection>
 
-          <ProfileSection title="Attendance Summary">
-            {attendances.length === 0 ? <EmptyState>Belum ada data attendance.</EmptyState> : (
+          <ProfileSection title="Kehadiran">
+            {attendances.length === 0 ? <EmptyState>Belum ada data kehadiran.</EmptyState> : (
               <><div className="grid grid-cols-3 gap-3 text-center"><div className="rounded-lg border border-emerald-500/20 bg-emerald-50/60 px-2 py-3"><p className="text-2xl font-extrabold text-emerald-700">{attendanceSummary.present}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">Present</p></div><div className="rounded-lg border border-amber-500/20 bg-amber-50/60 px-2 py-3"><p className="text-2xl font-extrabold text-amber-700">{attendanceSummary.late}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">Late</p></div><div className="rounded-lg border border-rose-500/20 bg-rose-50/60 px-2 py-3"><p className="text-2xl font-extrabold text-rose-700">{attendanceSummary.absent}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-rose-700">Absent</p></div></div><div className="mt-5 space-y-2 border-t border-[#D9E2FC] pt-4">{attendances.map((attendance, index) => (<article className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#F5F8FF] px-3 py-2.5" key={`${attendance.date ?? "attendance"}-${index}`}><div><p className="text-xs font-bold text-[#121B2E]">{formatDate(attendance.date)}</p><p className="mt-0.5 text-[11px] text-slate-500">{formatTime(attendance.clock_in)} – {formatTime(attendance.clock_out)}{attendance.notes ? ` · ${attendance.notes}` : ""}</p></div><HrmsStatusPill value={attendance.status} /></article>))}</div></>
             )}
           </ProfileSection>
 
           <ProfileSection title="Feedback &amp; Reward" className="lg:col-span-2">
-            {feedbackRewards.length === 0 ? <EmptyState>Belum tersedia</EmptyState> : (
+            {feedbackRewards.length === 0 ? <EmptyState>Belum ada data feedback atau reward.</EmptyState> : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {feedbackRewards.map((feedbackReward, index) => (
                   <article className="rounded-lg border border-[#D9E2FC] bg-[#F5F8FF]/70 p-4" key={`${feedbackReward.created_at ?? "feedback"}-${index}`}><div className="flex items-start justify-between gap-3"><p className="text-sm font-bold text-[#121B2E]">{displayValue(feedbackReward.title)}</p><span className="shrink-0 rounded-full border border-[#577CFC]/35 bg-white px-2 py-1 text-[10px] font-bold text-[#1E3765]">{feedbackReward.points === null ? "—" : `${feedbackReward.points} pts`}</span></div><p className="mt-1 text-[11px] font-semibold text-[#577CFC]">{[feedbackReward.type, feedbackReward.category].filter(Boolean).join(" · ") || "Feedback"}</p>{feedbackReward.message && <p className="mt-2 text-sm leading-5 text-slate-600">{feedbackReward.message}</p>}</article>

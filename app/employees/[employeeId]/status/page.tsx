@@ -33,7 +33,7 @@ export default async function EmployeeStatusPage({ params }: EmployeeStatusPageP
   if (!canManageEmployeeProfiles(userRole)) {
     return (
       <HrmsShell userEmail={user.email} userRole={userRole}>
-        <EmployeeManagementAccessDenied title="Change Employment Status" />
+        <EmployeeManagementAccessDenied title="Ubah Status Kepegawaian" />
       </HrmsShell>
     );
   }
@@ -54,7 +54,7 @@ export default async function EmployeeStatusPage({ params }: EmployeeStatusPageP
     return (
       <HrmsShell userEmail={user.email} userRole={userRole}>
         <section className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-white p-6 text-red-700 shadow-sm">
-          <h1 className="text-xl font-bold">Change Employment Status</h1>
+          <h1 className="text-xl font-bold">Ubah Status Kepegawaian</h1>
           <p className="mt-2">Data pegawai belum dapat dimuat. Silakan coba lagi nanti.</p>
           <Link className="mt-4 inline-block text-sm font-semibold text-[#1E3765] hover:text-[#0F2342]" href="/employees">
             ← Kembali ke Daftar Pegawai
@@ -68,9 +68,36 @@ export default async function EmployeeStatusPage({ params }: EmployeeStatusPageP
     return (
       <HrmsShell userEmail={user.email} userRole={userRole}>
         <section className="mx-auto max-w-3xl rounded-xl border border-[#D9E2FC] bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-bold text-[#121B2E]">Change Employment Status</h1>
+          <h1 className="text-xl font-bold text-[#121B2E]">Ubah Status Kepegawaian</h1>
           <p className="mt-2 text-slate-600">Data pegawai tidak ditemukan.</p>
           <Link className="mt-4 inline-block text-sm font-semibold text-[#1E3765] hover:text-[#0F2342]" href="/employees">
+            ← Kembali ke Daftar Pegawai
+          </Link>
+        </section>
+      </HrmsShell>
+    );
+  }
+
+  const { data: b2Source, error: b2SourceError } = await supabase
+    .from("d3_b2_employee_sources")
+    .select("employee_id")
+    .eq("employee_id", employee.id)
+    .maybeSingle();
+
+  if (b2SourceError) {
+    console.error("Employee status B2 source query failed", {
+      code: b2SourceError.code,
+      message: b2SourceError.message,
+    });
+  }
+
+  if (b2SourceError || !b2Source) {
+    return (
+      <HrmsShell userEmail={user.email} userRole={userRole}>
+        <section className="mx-auto max-w-3xl rounded-xl border border-[#D9E2FC] bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-bold text-[#121B2E]">Change Employment Status</h1>
+          <p className="mt-2 text-slate-600">Data employee dari registrasi B2 tidak ditemukan.</p>
+          <Link className="mt-4 inline-block text-sm font-semibold text-[#1E3765] hover:text-[#155DFC]" href="/employees">
             ← Kembali ke Daftar Pegawai
           </Link>
         </section>
@@ -81,12 +108,12 @@ export default async function EmployeeStatusPage({ params }: EmployeeStatusPageP
   return (
     <HrmsShell userEmail={user.email} userRole={userRole}>
       <section className="mx-auto max-w-4xl space-y-7">
-        <Link className="inline-flex text-sm font-semibold text-[#1E3765] hover:text-[#155DFC]" href={`/employees/${encodeURIComponent(employee.employee_id)}`}>← Employee Profile</Link>
+        <Link className="inline-flex text-sm font-semibold text-[#1E3765] hover:text-[#155DFC]" href={`/employees/${encodeURIComponent(employee.employee_id)}`}>← Profil Pegawai</Link>
 
         <header>
-          <p className="text-xs font-bold tracking-[0.16em] text-[#1E3765]">EMPLOYEE MANAGEMENT</p>
-          <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Change Employment Status</h1>
-          <p className="mt-3 text-base text-slate-600">Update an employee status without changing profile data or history.</p>
+          <p className="text-xs font-bold tracking-[0.16em] text-[#1E3765]">MANAJEMEN PEGAWAI</p>
+          <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.04em] text-[#121B2E] sm:text-[42px]">Ubah Status Kepegawaian</h1>
+          <p className="mt-3 text-base text-slate-600">Perbarui status tanpa mengubah data profil atau riwayat pegawai.</p>
         </header>
 
         <EmployeeStatusForm employee={employee} />
