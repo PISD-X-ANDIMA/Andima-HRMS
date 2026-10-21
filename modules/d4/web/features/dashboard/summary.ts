@@ -1,7 +1,8 @@
 import type { CompetencyAssessment } from "../../../competency/types";
 import type { DevelopmentNeedVersion } from "../../../development/types";
-import { performanceBand, type PerformanceBand } from "../../../kpi/scale";
-import { followUpOf, localToday, retrainedAt } from "../../../shared/rules";
+import { roleForPosition, type KpiCatalog } from "../../../kpi/catalog";
+import { performanceBand, scaleMaxOf, type PerformanceBand } from "../../../kpi/scale";
+import { followUpOf, localMonth, localToday, retrainedAt } from "../../../shared/rules";
 import type { EmployeeReference } from "../../../shared/types";
 import type { KpiAssessment } from "../../../supabase/types";
 import type { TrainingVersion } from "../../../training/types";
@@ -13,7 +14,51 @@ import { slug, statusLabel } from "../../ui/primitives";
 export type DashboardRow = { employee: EmployeeReference; scorecard?: KpiAssessment; gap: string };
 export type Slice = { key: string; label: string; count: number };
 
-const bandOf = (row: DashboardRow) => row.scorecard ? performanceBand(row.scorecard.overallScore, row.scorecard.definitionVersion) : null;
+/** FR-06.9 validation state: a scorecard is only summarised when it has five KPIs whose weights total 100%. */
+export const validScorecard = (item: KpiAssessment) => item.lines.length === 5 && item.lines.reduce((sum, line) => sum + line.weight_percent, 0) === 100;
+
+/**
+ * Period the dashboard opens on: the latest one that has started (WIB), so a record saved for a future month does not
+ * become the default and leave every other row empty. Falls back to the latest period when all of them are ahead.
+ */
+export const defaultPeriod = (periods: readonly string[], today = localMonth()) => periods.find((period) => period <= today) ?? periods[0] ?? "";
+
+/** Profile period when none is chosen: the latest started scorecard period, else the latest started evaluation period (FR-06.1). */
+export const profilePeriod = (scorecardPeriods: readonly string[], evaluationPeriods: readonly string[], today = localMonth()) =>
+  defaultPeriod(scorecardPeriods, today) || defaultPeriod(evaluationPeriods, today) || undefined;
+
+/**
+ * Average Total KPI of the valid scorecards listed, one entry per scale (1–5 or 1–100), most scorecards first. A period
+ * can hold both scales when a scorecard was saved under the older catalog, and the two must not be averaged together.
+ */
+export function averageScores(rows: readonly DashboardRow[]) {
+  const groups = new Map<number, number[]>();
+  for (const row of rows) {
+    if (!row.scorecard || !validScorecard(row.scorecard) || row.scorecard.overallScore === null || row.scorecard.overallScore === undefined) continue;
+    const max = scaleMaxOf(row.scorecard.definitionVersion);
+    groups.set(max, [...(groups.get(max) ?? []), Number(row.scorecard.overallScore)]);
+  }
+  return [...groups].map(([scaleMax, scores]) => ({ scaleMax, count: scores.length, average: scores.reduce((sum, score) => sum + score, 0) / scores.length }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Rows without a scorecard, and scorecards left out of the average because they are invalid (FR-06.9) or have no score. */
+export function reviewCounts(rows: readonly DashboardRow[]) {
+  const reviewed = rows.filter((row) => row.scorecard).length;
+  const scored = averageScores(rows).reduce((sum, item) => sum + item.count, 0);
+  return { missing: rows.length - reviewed, scored, unscored: reviewed - scored };
+}
+
+/**
+ * Employees without a scorecard whose position has no KPI role in the period's catalog: they cannot get a Performance
+ * Review (FR-02.11). Some positions have no KPI by design (Commissioner, HR Manager) and only a catalog migration adds a
+ * role, so the dashboard shows this as information, not as an alert HR could act on.
+ */
+export const withoutKpiRole = (snapshot: Snapshot, rows: readonly DashboardRow[], catalog: KpiCatalog | null) =>
+  catalog ? rows.filter((row) => !row.scorecard && positionById(snapshot, row.employee.positionId) && !roleForPosition(catalog, row.employee.positionId)) : [];
+
+// An invalid scorecard (FR-06.9) has no category, so it never reaches the donut, the filter or the Under Performance alert.
+const bandOf = (row: DashboardRow) => row.scorecard && validScorecard(row.scorecard) ? performanceBand(row.scorecard.overallScore, row.scorecard.definitionVersion) : null;
 
 export const BANDS: readonly PerformanceBand[] = ["Under Performance", "Average Performance", "High Performance"];
 
@@ -180,7 +225,8 @@ export function employeeHistory(snapshot: Snapshot, employeeId: string): History
   const entries: HistoryEntry[] = [];
   for (const item of snapshot.competency) {
     if (item.employeeId !== employeeId) continue;
-    const position = positionById(snapshot, item.positionId)?.title ?? "Position";
+    // An assessment can belong to a position that has since left the position master.
+    const position = positionById(snapshot, item.positionId)?.title ?? "posisi tidak ada di master";
     const roleChange = item.context === "role-change";
     entries.push({ id: `competency-${item.id}`, kind: "competency", day: item.effectiveDate, createdAt: item.createdAt, actor: item.actor,
       date: `${roleChange ? "Efektif " : ""}${formatDate(item.effectiveDate)}`, status: item.overallStatus, href: `/competency/${employeeId}/history`,

@@ -264,7 +264,7 @@ export const formatScorecard = (scorecard: { overallScore: number | null; defini
 /** Raw-score criteria from KPI Scorecard V3.1/V5.1 sheet "KPI Scoring Card"; shared by KPI and evaluation results. */
 export const SCORE_LABELS: Record<number, string> = { 1: "Very Poor", 2: "Poor", 3: "Fair", 4: "Good", 5: "Very Good" };
 
-/** An evaluation result is a whole 1–5 score, so it reads as "4 · Baik" rather than "4.00 / 5". */
+/** An evaluation result is a whole 1–5 score, so it reads as "4 · Good" rather than "4.00 / 5". */
 export function formatResult(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const label = SCORE_LABELS[Math.round(value)];

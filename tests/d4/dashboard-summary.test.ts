@@ -3,7 +3,8 @@ import type { DevelopmentNeedVersion } from "@/modules/d4/development/types";
 import type { KpiAssessment } from "@/modules/d4/supabase/types";
 import type { TrainingVersion } from "@/modules/d4/training/types";
 import { currentCompetencyStatus, currentGap, employeeSearchText, includesText, positionOf, type Snapshot } from "@/modules/d4/web/data/selectors";
-import { competencySlices, dashboardAlerts, employeeHistory, gapRanking, performanceSlices, type DashboardRow } from "@/modules/d4/web/features/dashboard/summary";
+import { catalogFor, seedCatalogSet } from "@/modules/d4/kpi/catalog";
+import { averageScores, competencySlices, dashboardAlerts, defaultPeriod, employeeHistory, gapRanking, performanceSlices, profilePeriod, reviewCounts, withoutKpiRole, type DashboardRow } from "@/modules/d4/web/features/dashboard/summary";
 
 async function hrSnapshot(): Promise<Snapshot> {
   vi.stubEnv("NEXT_PUBLIC_D4_FIXTURE_ROLE", "HR");
@@ -14,8 +15,73 @@ async function hrSnapshot(): Promise<Snapshot> {
 afterEach(() => { vi.unstubAllEnvs(); });
 
 const employee = (id: string) => ({ id, employeeId: id, fullName: `Pegawai ${id}`, positionId: null, departmentId: null });
-const scorecard = (overallScore: number, definitionVersion: string) => ({ overallScore, definitionVersion }) as KpiAssessment;
 const rowsOf = (snapshot: Snapshot): DashboardRow[] => snapshot.reference.employees.map((item) => ({ employee: item, gap: currentCompetencyStatus(snapshot, item) }));
+
+const lines = (count = 5) => Array.from({ length: count }, (_, index) => ({ indicator_order: index + 1, weight_percent: 20 }));
+/** A scorecard with `count` KPIs of 20% each: valid (FR-06.9) only with the default five. */
+const scorecard = (overallScore: number, definitionVersion: string, count = 5) => ({ overallScore, definitionVersion, lines: lines(count) }) as unknown as KpiAssessment;
+
+describe("People Dashboard audit (21 Oct 2026)", () => {
+  it("opens on the latest period that has started, not on a future one", () => {
+    expect(defaultPeriod(["2026-12", "2026-10", "2026-09"], "2026-10")).toBe("2026-10");
+    expect(defaultPeriod(["2026-12", "2026-10", "2026-09"], "2026-11")).toBe("2026-10");
+    expect(defaultPeriod(["2027-01", "2026-12"], "2026-10")).toBe("2027-01");
+    expect(defaultPeriod([], "2026-10")).toBe("");
+  });
+
+  it("averages valid scorecards per scale and never mixes 1–5 with 1–100", () => {
+    const rows: DashboardRow[] = [
+      { employee: employee("a"), gap: "Gap", scorecard: scorecard(3, "V5.1") },
+      { employee: employee("b"), gap: "Gap", scorecard: scorecard(2, "V5.1") },
+      { employee: employee("c"), gap: "Gap", scorecard: scorecard(90, "V6") },
+      { employee: employee("d"), gap: "Gap", scorecard: scorecard(5, "V5.1", 4) },
+      { employee: employee("e"), gap: "Gap" },
+    ];
+    expect(averageScores(rows)).toEqual([{ scaleMax: 5, count: 2, average: 2.5 }, { scaleMax: 100, count: 1, average: 90 }]);
+  });
+
+  it("lists employees whose position has no KPI role in the period's catalog, skipping those with a scorecard", async () => {
+    const base = await hrSnapshot();
+    const catalog = catalogFor(seedCatalogSet(base.reference.positions), "2026-10");
+    const rows = rowsOf(base);
+    const titles = (list: readonly DashboardRow[]) => [...new Set(list.map((row) => positionOf(base, row.employee)?.title))].sort();
+    // Commissioner and HR Manager have no KPI in V5.1 by design (kpi-scoring.test.ts).
+    expect(titles(withoutKpiRole(base, rows, catalog))).toEqual(["Commissioner", "HR Manager"]);
+    const reviewed = rows.map((row) => positionOf(base, row.employee)?.title === "HR Manager" ? { ...row, scorecard: scorecard(4, "V5.1") } : row);
+    expect(titles(withoutKpiRole(base, reviewed, catalog))).toEqual(["Commissioner"]);
+    expect(withoutKpiRole(base, rows, null)).toEqual([]);
+    // Information in the Performance card, not an alert HR cannot act on.
+    expect(dashboardAlerts(base, rows).some((alert) => alert.key === "kpi-not-in-catalog")).toBe(false);
+  });
+
+  it("counts missing reviews apart from scorecards left out of the average", () => {
+    const rows: DashboardRow[] = [
+      { employee: employee("a"), gap: "Gap", scorecard: scorecard(3, "V5.1") },
+      { employee: employee("b"), gap: "Gap", scorecard: scorecard(4, "V5.1", 4) },
+      { employee: employee("c"), gap: "Gap", scorecard: { ...scorecard(4, "V5.1"), lines: lines().map((line) => ({ ...line, weight_percent: 10 })) } as unknown as KpiAssessment },
+      { employee: employee("d"), gap: "Gap", scorecard: { ...scorecard(4, "V5.1"), overallScore: null } as KpiAssessment },
+      { employee: employee("e"), gap: "Gap" },
+    ];
+    expect(reviewCounts(rows)).toEqual({ missing: 1, scored: 1, unscored: 3 });
+    expect(averageScores(rows)).toEqual([{ scaleMax: 5, count: 1, average: 3 }]);
+  });
+
+  it("leaves an invalid scorecard out of the performance category and the Under Performance alert", async () => {
+    const rows: DashboardRow[] = [
+      { employee: employee("valid"), gap: "Gap", scorecard: scorecard(70, "V6") },
+      { employee: employee("invalid"), gap: "Gap", scorecard: scorecard(70, "V6", 4) },
+    ];
+    expect(performanceSlices(rows).rated).toBe(1);
+    expect(dashboardAlerts(await hrSnapshot(), rows).find((alert) => alert.key === "under-performance")?.people).toEqual(["Pegawai valid"]);
+  });
+
+  it("opens a profile on its latest started scorecard period before an evaluation-only period", () => {
+    expect(profilePeriod(["2026-08"], ["2026-10", "2026-08"], "2026-10")).toBe("2026-08");
+    expect(profilePeriod(["2026-12", "2026-09"], [], "2026-10")).toBe("2026-09");
+    expect(profilePeriod([], ["2026-10"], "2026-10")).toBe("2026-10");
+    expect(profilePeriod([], [], "2026-10")).toBeUndefined();
+  });
+});
 
 describe("People Dashboard charts", () => {
   it("counts Under / Average / High only for 1–100 scorecards and leaves 1–5 scorecards unrated", () => {

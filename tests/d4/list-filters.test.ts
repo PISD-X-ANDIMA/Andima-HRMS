@@ -110,7 +110,8 @@ describe("Development Requirement competency and priority filters (FR-D4-002 B)"
 });
 
 describe("People Dashboard filters (FR-D4-004 B)", () => {
-  const scorecard = (overallScore: number, definitionVersion: string) => ({ overallScore, definitionVersion }) as KpiAssessment;
+  // Five KPIs of 20%: a valid scorecard (FR-06.9), so it has a performance category.
+  const scorecard = (overallScore: number, definitionVersion: string) => ({ overallScore, definitionVersion, lines: Array.from({ length: 5 }, () => ({ weight_percent: 20 })) }) as unknown as KpiAssessment;
   const person = (id: string) => ({ id, employeeId: id, fullName: id, positionId: null, departmentId: null });
   const rows: (DashboardRow & { training?: string })[] = [
     { employee: person("under-gap"), gap: "Gap", scorecard: scorecard(70, "V6"), training: "In Progress" },
