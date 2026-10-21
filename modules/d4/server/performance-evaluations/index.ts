@@ -1,5 +1,5 @@
 import type { EvaluationInput } from "../../performance/types";
-import { assertNotFutureDate, assertNotSelf, assertPeriodRevision, assertRevisionReason } from "../../shared/rules";
+import { assertEvaluationInPeriod, assertNotFutureDate, assertNotSelf, assertPeriodRevision, assertRevisionReason } from "../../shared/rules";
 import { ApiError, employeeFilter, enforce, field, optionalUuid, readJson } from "../_lib/http";
 import { d4Session, requireWriter } from "../_lib/session";
 
@@ -28,7 +28,7 @@ export async function createEvaluation(request: Request) {
   const body = await readJson(request);
   const snapshot = await repository.loadSnapshot();
   const evaluator = snapshot.reference.employees.find((item) => item.id === access.employeeId)?.fullName;
-  if (!evaluator) throw new ApiError("FORBIDDEN", "Akun belum terhubung dengan data employee.");
+  if (!evaluator) throw new ApiError("FORBIDDEN", "Akun ini belum terhubung ke data pegawai.");
   const status = field.oneOf(body, "status", ["completed"] as const); // FR-D4-001 defines no draft evaluation.
   const completed = status === "completed";
   const input: EvaluationInput = {
@@ -39,7 +39,8 @@ export async function createEvaluation(request: Request) {
     status,
     // Legacy columns of d4_performance_evaluations: FR-D4-001 defines no review label or aspects, so the API stores neutral values.
     reviewStatus: "Needs Review",
-    overallScore: field.score(body.overallScore, "Hasil evaluasi", { required: completed }),
+    // Evaluations are notes only; scoring lives in the KPI Scorecard. Any submitted score is ignored.
+    overallScore: null,
     aspects: [],
     generalNotes: field.text(body, "generalNotes", { required: completed, max: 4000 }),
     evidenceReference: field.text(body, "evidenceReference", { required: false, max: 500 }) || null,
@@ -47,7 +48,8 @@ export async function createEvaluation(request: Request) {
   enforce(() => assertNotSelf(access.employeeId, input.employeeId));
   const revisionOf = optionalUuid(body, "revisionOf");
   enforce(() => assertNotFutureDate(input.evaluationDate));
-  enforce(() => assertPeriodRevision(snapshot.performance, input.employeeId, input.period, revisionOf, "Evaluasi"));
+  enforce(() => assertEvaluationInPeriod(input.period, input.evaluationDate));
+  enforce(() => assertPeriodRevision(snapshot.performance, input.employeeId, input.period, revisionOf, "Evaluation"));
   enforce(() => assertRevisionReason(revisionOf, input.generalNotes));
   return { id: await repository.savePerformance(input, snapshot.reference) };
 }

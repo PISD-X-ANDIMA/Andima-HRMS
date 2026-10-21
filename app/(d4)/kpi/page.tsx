@@ -1,5 +1,6 @@
-import { KpiListPage } from "@/modules/d4/web/features/kpi/KpiPages";
+import { redirect } from "next/navigation";
 
+// KPI Scorecard is part of Penilaian Kinerja; the old URL keeps working for bookmarks and shared links.
 export default function Page() {
-  return <KpiListPage />;
+  redirect("/performance");
 }

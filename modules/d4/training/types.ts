@@ -1,4 +1,6 @@
 export type TrainingStatus = "Planned" | "In Progress" | "Completed" | "Cancelled";
+/** Q16: HR's follow-up of a Not Passed training. Retraining creates a new training; any other step needs a note. */
+export type TrainingFollowUp = "Retraining" | "Other follow-up";
 
 export interface TrainingVersion {
   readonly id: string;
@@ -12,6 +14,8 @@ export interface TrainingVersion {
   readonly status: TrainingStatus;
   readonly result: string;
   readonly notes: string;
+  /** Recorded in this version only; see followUpOf for the follow-up that applies now. */
+  readonly followUp?: TrainingFollowUp | null;
   readonly createdAt: string;
   readonly actor: string;
 }

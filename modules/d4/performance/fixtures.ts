@@ -1,7 +1,7 @@
 import type { PerformanceEvaluation } from "./types";
 
 // FR-D4-001 defines no aspects or review labels; the legacy columns keep neutral values.
-function sample(id: number, employee: number, score: number, notes: string, evaluator = "Mercury"): PerformanceEvaluation {
+function sample(id: number, employee: number, score: number, notes: string, evaluator = "Mrs. Maya"): PerformanceEvaluation {
   return {
     id: `FIX-D4-PERF-00${id}`,
     source: "fixture",
@@ -21,12 +21,12 @@ function sample(id: number, employee: number, score: number, notes: string, eval
 }
 
 export const performanceFixtureRecords: readonly PerformanceEvaluation[] = [
-  sample(1, 9, 4, "Hasil kerja konsisten dan akurat. Rekomendasi: pelatihan akurasi administrasi lanjutan."),
-  sample(2, 10, 4, "Target periode tercapai. Belum ada rekomendasi pelatihan."),
-  sample(3, 11, 4, "Kolaborasi tim baik. Rekomendasi: penyegaran keselamatan operasi."),
-  // Mercury (HR) is evaluated by someone else; nobody evaluates themselves.
-  sample(4, 12, 4, "Dokumentasi HR tepat waktu.", "Oscar"),
-  sample(5, 13, 5, "Administrasi penjualan sangat rapi."),
-  sample(6, 14, 3, "Perlu pendampingan rekonsiliasi. Rekomendasi: pelatihan akurasi administrasi."),
-  sample(7, 15, 4, "Checklist operasi lengkap."),
+  sample(1, 9, 4, "Consistent and accurate work. Recommendation: advanced administrative accuracy training."),
+  sample(2, 10, 4, "Period target met. No training recommendation yet."),
+  sample(3, 11, 4, "Good teamwork. Recommendation: Coretax reporting refresher."),
+  // Mrs. Maya (HR) is evaluated by the Director of Human Capital & Culture; nobody evaluates themselves.
+  sample(4, 12, 4, "HR documentation on time.", "Mr. Gema Arsisto"),
+  sample(5, 13, 5, "Very tidy sales administration."),
+  sample(6, 14, 3, "Needs coaching on reconciliation. Recommendation: administrative accuracy training."),
+  sample(7, 15, 4, "Customer escalations closed within SLA."),
 ];

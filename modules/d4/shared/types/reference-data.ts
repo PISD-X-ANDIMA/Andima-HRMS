@@ -22,6 +22,8 @@ export interface EmployeeReference {
   readonly fullName: string;
   readonly positionId: string | null;
   readonly departmentId: string | null;
+  /** PROBATION / INTERN / CONTRACT / PERMANENT as HR keeps it on the account; absent until the view exposes it. */
+  readonly employmentStatus?: string | null;
 }
 
 export interface CompetencyReference {

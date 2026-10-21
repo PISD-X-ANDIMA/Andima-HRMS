@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { compareCompetencies } from "@/modules/d4/competency/service";
 import { createDemoSeed, DEMO_LEVEL_SCALE, DEMO_PERSONAS, DEMO_POSITION_ROLES, DEMO_TODAY, demoKpiTotal } from "@/modules/d4/demo/dataset";
-import { indicatorsFor, KPI_V51_CATALOG, roleForPositionTitle, selectCatalog } from "@/modules/d4/kpi/catalog";
+import { indicatorsFor, KPI_V51_CATALOG, roleForPositionTitle } from "@/modules/d4/kpi/catalog";
 import { validatePerformanceInput } from "@/modules/d4/performance/validation";
 import { latestDevelopment, latestTraining, type D4LiveSnapshot } from "@/modules/d4/supabase/types";
 
 const seed: D4LiveSnapshot = { ...createDemoSeed(), role: "HR", actorEmployeeId: DEMO_PERSONAS[0].employeeId };
 const ref = seed.reference;
-const catalog = selectCatalog(KPI_V51_CATALOG);
+const catalog = { version: "V5.1", rows: KPI_V51_CATALOG };
 const employee = (id: string) => ref.employees.find((item) => item.id === id);
 const positionTitle = (employeeId: string) => ref.positions.find((item) => item.id === employee(employeeId)?.positionId)?.title;
 const unique = (ids: readonly string[]) => new Set(ids).size === ids.length;

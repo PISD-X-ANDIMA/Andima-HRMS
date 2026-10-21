@@ -1,4 +1,4 @@
-import type { KpiCatalog } from "../../kpi/catalog";
+import type { KpiCatalogSet } from "../../kpi/catalog";
 import type { D4LiveSnapshot } from "../../supabase/types";
 import type { D4DataSource } from "./source";
 
@@ -11,9 +11,9 @@ const REQUEST_TIMEOUT_MS = 20_000;
 
 const MESSAGES = {
   NETWORK_ERROR: "Tidak dapat terhubung ke server. Periksa koneksi internet lalu coba lagi.",
-  TIMEOUT: "Server terlalu lama merespons. Coba lagi beberapa saat lagi.",
-  INTEGRATION_ERROR: "Layanan data HRMS sedang tidak dapat dihubungi. Coba lagi beberapa saat lagi.",
-  SERVER_ERROR: "Permintaan ke server gagal. Coba lagi beberapa saat lagi.",
+  TIMEOUT: "Server terlalu lama merespons. Coba lagi sebentar lagi.",
+  INTEGRATION_ERROR: "Layanan data HRMS sedang tidak dapat dihubungi. Coba lagi sebentar lagi.",
+  SERVER_ERROR: "Permintaan ke server gagal. Coba lagi sebentar lagi.",
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -45,12 +45,13 @@ const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POS
 export const apiSource: D4DataSource = {
   mode: "live",
   loadSnapshot: () => request<D4LiveSnapshot>("/api/d4/snapshot"),
-  loadKpiCatalog: () => request<KpiCatalog>("/api/d4/kpi-catalog"),
+  loadKpiCatalog: () => request<KpiCatalogSet>("/api/d4/kpi-catalog"),
   createEvaluation: async (input) => (await post<{ id: string }>("/api/d4/performance-evaluations", input)).id,
   createKpiAssessment: async (input) => (await post<{ id: string }>("/api/d4/kpi-assessments", input)).id,
   saveCompetency: async (input) => (await post<{ id: string }>("/api/d4/competency-assessments", input)).id,
   createDevelopment: async (input) => (await post<{ id: string }>("/api/d4/development-needs", input)).id,
-  updateDevelopment: async (needId, status, notes) => { await post(`/api/d4/development-needs/${encodeURIComponent(needId)}/versions`, { status, notes }); },
+  updateDevelopment: async (needId, status, notes, edit) => { await post(`/api/d4/development-needs/${encodeURIComponent(needId)}/versions`, { status, notes, ...edit }); },
   createTraining: async (input) => (await post<{ id: string }>("/api/d4/training-records", input)).id,
   updateTraining: async (trainingId, status, result, notes) => { await post(`/api/d4/training-records/${encodeURIComponent(trainingId)}/versions`, { status, result, notes }); },
+  recordTrainingFollowUp: async (trainingId, input) => (await post<{ retrainingId: string | null }>(`/api/d4/training-records/${encodeURIComponent(trainingId)}/follow-up`, input)).retrainingId,
 };

@@ -43,15 +43,19 @@ const statusTone: Record<string, Tone> = {
   "In Progress": "info", Active: "info",
   Planned: "warning", "Needs Review": "warning", Identified: "warning", Draft: "neutral",
   Gap: "danger", Cancelled: "danger", "Needs Attention": "danger",
-  "Data Belum Cukup": "neutral", "Bukti Belum Cukup": "neutral", "Not Evaluated": "neutral", "Belum dinilai": "neutral", "Belum Ada Persyaratan": "neutral",
+  // KPI score bands (1–100 scorecards): below 80 yellow, 80–85 average, above 85 high.
+  "Under Performance": "warning", "Average Performance": "info", "High Performance": "success",
+  // Reassessment after a Completed development requirement.
+  Retraining: "warning", "Meets requirement": "success", "Needs reassessment": "neutral",
+  "Data Belum Cukup": "neutral", "Bukti Belum Cukup": "neutral", "Not Evaluated": "neutral", "Belum dinilai": "neutral", "Belum Ada Persyaratan": "neutral", "Belum Ada Posisi": "neutral",
 };
 
-// Display labels for status and priority values. Stored values stay English; this only changes what users read.
+// Display labels for stored values. Workflow statuses are already English; competency statuses come from D3 in
+// Indonesian and are translated here only for display.
 const STATUS_LABELS: Record<string, string> = {
-  Completed: "Selesai", "In Progress": "Sedang Berjalan", Planned: "Direncanakan", Identified: "Teridentifikasi",
-  Draft: "Draf", Cancelled: "Dibatalkan", "Not Evaluated": "Belum Dievaluasi", "On Track": "Sesuai Target",
-  Active: "Aktif", "Needs Review": "Perlu Ditinjau", "Needs Attention": "Perlu Perhatian", "Bukti Belum Cukup": "Data Belum Cukup",
-  High: "Tinggi", Medium: "Sedang", Low: "Rendah",
+  Terpenuhi: "Met", "Data Belum Cukup": "Insufficient Data", "Bukti Belum Cukup": "Insufficient Data",
+  // No requirement or no position means nothing can be concluded, so it reads as Insufficient Data (3 competency statuses).
+  "Belum Ada Persyaratan": "Insufficient Data", "Belum Ada Posisi": "Insufficient Data",
 };
 
 export const statusLabel = (status: string) => STATUS_LABELS[status] ?? status;
@@ -72,7 +76,7 @@ export function SourceChip({ label, reference, href }: { label: string; referenc
 export function Card({ title, testId, actions, children, className, padded = true }: { title?: string; testId?: string; actions?: ReactNode; children: ReactNode; className?: string; padded?: boolean }) {
   return <section data-testid={title ? `card-${testId ?? slug(title)}` : undefined} className={cx("min-w-0 rounded-2xl border border-line bg-surface shadow-card", padded && "p-6", className)}>
     {(title || actions) && <div className={cx("flex flex-wrap items-center justify-between gap-3", padded ? "mb-5" : "px-6 pt-6 pb-4")}>
-      {title && <h2 className="font-display text-lg text-ink">{title}</h2>}{actions}
+      {title && <h2 className="font-display font-semibold text-lg text-ink">{title}</h2>}{actions}
     </div>}
     {children}
   </section>;

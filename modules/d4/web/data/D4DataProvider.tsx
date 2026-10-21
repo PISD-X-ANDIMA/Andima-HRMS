@@ -1,12 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import type { KpiCatalog } from "../../kpi/catalog";
+import type { KpiCatalogSet } from "../../kpi/catalog";
 import { createD4BrowserClient } from "../../supabase/client";
 import type { D4LiveSnapshot } from "../../supabase/types";
 import { apiSource, D4RequestError } from "./api-source";
 import type { D4DataMode } from "./mode";
+import { asEmployee } from "./selectors";
 import type { D4DataSource } from "./source";
 
 export type ToastMessage = { id: number; tone: "success" | "error"; text: string };
@@ -18,14 +19,41 @@ type D4Data = {
   status: "loading" | "ready" | "error";
   error: string;
   snapshot: D4LiveSnapshot | null;
-  catalog: KpiCatalog | null;
+  catalog: KpiCatalogSet | null;
   busy: boolean;
   reload: () => void;
   /** Runs a write, refreshes the snapshot, and shows a toast. Returns the error message for inline form feedback. */
   run: <T>(operation: (source: D4DataSource) => Promise<T>, success: string) => Promise<Result<T>>;
   toasts: ToastMessage[];
   dismissToast: (id: number) => void;
+  /** Employee id while HR previews the employee view, otherwise null. */
+  viewAs: string | null;
+  /** Real signed-in role may preview (HR/manager); the simulated snapshot never changes this. */
+  canSimulate: boolean;
+  setViewAs: (employeeId: string | null) => void;
 };
+
+const VIEW_AS_KEY = "d4-view-as";
+
+// The previewed employee lives in sessionStorage (per tab), cached here so a blocked storage still works for the
+// current page. Writes in the same tab fire no "storage" event, so writeViewAs notifies the subscribers itself.
+let storedViewAs: string | null | undefined;
+const viewAsListeners = new Set<() => void>();
+function subscribeViewAs(listener: () => void) {
+  viewAsListeners.add(listener);
+  return () => { viewAsListeners.delete(listener); };
+}
+function readViewAs() {
+  if (storedViewAs === undefined) {
+    try { storedViewAs = sessionStorage.getItem(VIEW_AS_KEY); } catch { storedViewAs = null; /* storage blocked: start without simulation */ }
+  }
+  return storedViewAs;
+}
+function writeViewAs(employeeId: string | null) {
+  storedViewAs = employeeId;
+  try { if (employeeId) sessionStorage.setItem(VIEW_AS_KEY, employeeId); else sessionStorage.removeItem(VIEW_AS_KEY); } catch { /* per-tab convenience only */ }
+  viewAsListeners.forEach((listener) => listener());
+}
 
 const Context = createContext<D4Data | null>(null);
 
@@ -53,10 +81,12 @@ export function D4DataProvider({ children, mode }: { children: ReactNode; mode: 
   const [status, setStatus] = useState<D4Data["status"]>("loading");
   const [error, setError] = useState("");
   const [snapshot, setSnapshot] = useState<D4LiveSnapshot | null>(null);
-  const [catalog, setCatalog] = useState<KpiCatalog | null>(null);
+  const [catalog, setCatalog] = useState<KpiCatalogSet | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  // The server and the hydrating render see no simulation, so the first client render matches the server HTML.
+  const viewAs = useSyncExternalStore(subscribeViewAs, readViewAs, () => null);
   // Set synchronously, unlike `busy`, so a second click before the re-render cannot start another POST.
   const writing = useRef(false);
 
@@ -66,6 +96,11 @@ export function D4DataProvider({ children, mode }: { children: ReactNode; mode: 
     setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 4000);
   }, []);
 
+  const canSimulate = snapshot?.role === "HR" || snapshot?.role === "MANAGER";
+  // A stale id (employee gone, or role no longer HR/manager) previews nobody, so it never blocks saves.
+  const target = canSimulate && viewAs ? snapshot?.reference.employees.find((item) => item.id === viewAs) : undefined;
+  const simulating = target?.id ?? null;
+
   useEffect(() => {
     let active = true;
     source.then((data) => Promise.all([data.loadSnapshot(), data.loadKpiCatalog()])).then(([nextSnapshot, nextCatalog]) => {
@@ -74,7 +109,7 @@ export function D4DataProvider({ children, mode }: { children: ReactNode; mode: 
     }).catch((cause: unknown) => {
       if (!active) return;
       setStatus("error");
-      setError(cause instanceof Error ? cause.message : "Data D4 gagal dimuat.");
+      setError(cause instanceof Error ? cause.message : "Gagal memuat data D4.");
       // Session expired: leave the loading screen and go to /login. The stale session is cleared first, because
       // the proxy sends a still-signed-in user from /login back to /dashboard and the two pages would bounce.
       if (cause instanceof D4RequestError && cause.status === 401) {
@@ -87,6 +122,11 @@ export function D4DataProvider({ children, mode }: { children: ReactNode; mode: 
 
   const run = useCallback(async <T,>(operation: (data: D4DataSource) => Promise<T>, success: string): Promise<Result<T>> => {
     if (writing.current) return { ok: false, error: "Penyimpanan sebelumnya masih diproses." };
+    if (simulating) {
+      const message = "Mode simulasi Employee: penyimpanan dinonaktifkan. Keluar dari simulasi untuk menyimpan.";
+      pushToast("error", message);
+      return { ok: false, error: message };
+    }
     writing.current = true;
     setBusy(true);
     let data: D4DataSource;
@@ -95,7 +135,7 @@ export function D4DataProvider({ children, mode }: { children: ReactNode; mode: 
       data = await source;
       value = await operation(data);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "Penyimpanan gagal.";
+      const message = cause instanceof Error ? cause.message : "Gagal menyimpan.";
       pushToast("error", message);
       writing.current = false;
       setBusy(false);
@@ -106,18 +146,20 @@ export function D4DataProvider({ children, mode }: { children: ReactNode; mode: 
       setSnapshot(await data.loadSnapshot());
       pushToast("success", success);
     } catch {
-      pushToast("error", `${success} Namun data terbaru gagal dimuat, muat ulang halaman sebelum menyimpan lagi.`);
+      pushToast("error", `${success} Namun data terbaru gagal dimuat; muat ulang halaman sebelum menyimpan lagi.`);
     }
     writing.current = false;
     setBusy(false);
     return { ok: true, value };
-  }, [source, pushToast]);
+  }, [source, pushToast, simulating]);
+
+  const shown = useMemo(() => (snapshot && target ? asEmployee(snapshot, target.id) : snapshot), [snapshot, target]);
 
   const value = useMemo<D4Data>(() => ({
-    mode, status, error, snapshot, catalog, busy, run, toasts,
+    mode, status, error, snapshot: shown, catalog, busy, run, toasts, viewAs: simulating, canSimulate, setViewAs: writeViewAs,
     reload: () => { setStatus("loading"); setAttempt((count) => count + 1); },
     dismissToast: (id) => setToasts((items) => items.filter((item) => item.id !== id)),
-  }), [mode, status, error, snapshot, catalog, busy, run, toasts]);
+  }), [mode, status, error, shown, catalog, busy, run, toasts, simulating, canSimulate]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

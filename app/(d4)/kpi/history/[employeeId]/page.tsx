@@ -1,6 +1,6 @@
-import { KpiHistoryPage } from "@/modules/d4/web/features/kpi/KpiPages";
+import { redirect } from "next/navigation";
 
 export default async function Page({ params }: { params: Promise<{ employeeId: string }> }) {
   const { employeeId } = await params;
-  return <KpiHistoryPage employeeId={employeeId} />;
+  redirect(`/performance/history/${encodeURIComponent(employeeId)}`);
 }

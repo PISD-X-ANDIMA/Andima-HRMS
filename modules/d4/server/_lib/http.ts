@@ -12,7 +12,7 @@ export async function handle(run: () => Promise<unknown>, successStatus = 200) {
     // message so database details and stack traces never reach the client (TR-17).
     const error = cause instanceof ApiError ? cause
       : isNetworkFailure(cause instanceof Error ? cause.message : "") ? new ApiError("INTEGRATION_ERROR", NETWORK_ERROR_MESSAGE)
-        : new ApiError("SERVER_ERROR", "Permintaan gagal diproses. Coba lagi beberapa saat lagi.");
+        : new ApiError("SERVER_ERROR", "Permintaan tidak dapat diproses. Coba lagi sebentar lagi.");
     if (error.code === "SERVER_ERROR" || error.code === "INTEGRATION_ERROR") console.error("[d4-api]", cause);
     return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status });
   }
@@ -24,7 +24,7 @@ export async function handle(run: () => Promise<unknown>, successStatus = 200) {
  */
 export function methodNotAllowed(allowed: string) {
   return () => {
-    const error = new ApiError("METHOD_NOT_ALLOWED", "Metode HTTP ini tidak didukung untuk endpoint tersebut.");
+    const error = new ApiError("METHOD_NOT_ALLOWED", "Metode HTTP ini tidak didukung untuk endpoint ini.");
     return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: error.status, headers: { Allow: allowed } });
   };
 }
@@ -36,8 +36,8 @@ export function optionalUuid(body: Record<string, unknown>, key: string): string
 
 export async function readJson(request: Request): Promise<Record<string, unknown>> {
   let body: unknown;
-  try { body = await request.json(); } catch { throw new ApiError("BAD_REQUEST", "Body harus berupa JSON yang valid."); }
-  if (!body || typeof body !== "object" || Array.isArray(body)) throw new ApiError("BAD_REQUEST", "Body harus berupa objek JSON.");
+  try { body = await request.json(); } catch { throw new ApiError("BAD_REQUEST", "Isi permintaan harus JSON yang valid."); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new ApiError("BAD_REQUEST", "Isi permintaan harus berupa objek JSON.");
   return body as Record<string, unknown>;
 }
 
@@ -73,17 +73,18 @@ export const field = {
     if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new ApiError("VALIDATION_FAILED", `Field ${key} harus berformat YYYY-MM-DD.`);
     return value;
   },
-  /** Integer score 1–5 (business rule; 3.5 is rejected). */
-  score(value: unknown, label: string, { required = true } = {}): number | null {
+  /** Integer score 1–`max` (5 for the Excel scale, 100 from catalog V6; 3.5 is rejected). */
+  score(value: unknown, label: string, { required = true, max = 5 }: { required?: boolean; max?: number } = {}): number | null {
     if (value === null || value === undefined || value === "") {
       if (required) throw new ApiError("VALIDATION_FAILED", `${label} wajib diisi.`);
       return null;
     }
-    if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 5) throw new ApiError("VALIDATION_FAILED", `${label} harus bilangan bulat 1 sampai 5.`);
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > max) throw new ApiError("VALIDATION_FAILED", `${label} harus bilangan bulat 1 sampai ${max}.`);
     return value;
   },
 };
 
 export function employeeFilter(request: Request): string | null {
-  return new URL(request.url).searchParams.get("employee_id");
+  const value = new URL(request.url).searchParams.get("employee_id");
+  return value ? field.uuid({ employee_id: value }, "employee_id") : null;
 }

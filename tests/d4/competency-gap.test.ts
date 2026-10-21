@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { compareCompetencies } from "@/modules/d4/competency/service";
-import { indicatorsFor, KPI_V51_CATALOG, selectCatalog } from "@/modules/d4/kpi/catalog";
+import { indicatorsFor, KPI_V51_CATALOG } from "@/modules/d4/kpi/catalog";
 import { d4ReferenceFixture } from "@/modules/d4/shared/fixtures";
 import type { ReferenceDataSnapshot } from "@/modules/d4/shared/types";
 import { latestDevelopment, latestTraining } from "@/modules/d4/supabase/types";
@@ -13,9 +13,9 @@ import type { D4DataSource } from "@/modules/d4/web/data/source";
 // reassessment is saved.
 const ALFA = "d4000000-0000-4000-8000-000000000009";
 const FINANCE_STAFF = "d4000000-0000-4000-8000-000000000008";
-const ALFA_GAP = "d4000000-0000-4000-8000-000000000028"; // Akurasi Administrasi: level 2, min. 4
+const ALFA_GAP = "d4000000-0000-4000-8000-000000000028"; // Administrative Accuracy: level 2, min. 4
 const ADMIN_ACCURACY = "d4000000-0000-4000-8000-000000000022";
-const THIRD_REQUIREMENT_COMPETENCY = "d4000000-0000-4000-8000-000000000023"; // Alfa has no skill record yet
+const THIRD_REQUIREMENT_COMPETENCY = "d4000000-0000-4000-8000-000000000023"; // Kak Ismi has no skill record yet
 
 const gapFinding = (findings: readonly { requirementId: string; status: string }[]) => findings.find((item) => item.requirementId === ALFA_GAP)?.status;
 
@@ -29,28 +29,28 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-async function latestAlfaAssessment() {
+async function latestIsmiAssessment() {
   return [...(await source.loadSnapshot()).competency].filter((item) => item.employeeId === ALFA).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
 describe("competency gap is not resolved automatically", () => {
-  it("starts as an open Gap for Alfa (level 2 of min. 4) with an open requirement and planned training", async () => {
+  it("starts as an open Gap for Kak Ismi (level 2 of min. 4) with an open requirement and planned training", async () => {
     const snapshot = await source.loadSnapshot();
-    expect(gapFinding((await latestAlfaAssessment()).findings)).toBe("Gap");
+    expect(gapFinding((await latestIsmiAssessment()).findings)).toBe("Gap");
     expect(latestDevelopment(snapshot).find((item) => item.needId === "FIX-D4-DEV-001")).toMatchObject({ sourceType: "competency_gap", sourceRef: ALFA_GAP });
   });
 
   it("stays Gap after training and the requirement are Completed and good scores are saved, and a new snapshot still shows Gap", async () => {
-    await source.updateTraining("FIX-D4-TRN-001", "Completed", "Lulus workshop", "");
+    await source.updateTraining("FIX-D4-TRN-001", "Completed", "Passed", "Lulus workshop");
     await source.updateDevelopment("FIX-D4-DEV-001", "Completed", "Training selesai");
-    await source.createEvaluation({ employeeId: ALFA, period: "2026-11", evaluationDate: "2026-10-01", evaluator: "x", status: "completed", reviewStatus: "Needs Review", overallScore: 5, aspects: [], generalNotes: "Sangat baik.", evidenceReference: null });
-    const lines = indicatorsFor(selectCatalog(KPI_V51_CATALOG), 10).map((row) => ({ indicator_order: row.indicator_order, kpi_name: row.kpi_name, weight_percent: row.weight_percent, target: "", actual: "", raw_score: 5, comment: "" }));
-    await source.createKpiAssessment({ employeeId: ALFA, roleOrder: 10, period: "2026-11", evaluationDate: "2026-10-01", evaluatorName: "x", status: "completed", lines, generalNotes: "" });
+    await source.createEvaluation({ employeeId: ALFA, period: "2026-10", evaluationDate: "2026-10-01", evaluator: "x", status: "completed", reviewStatus: "Needs Review", overallScore: 5, aspects: [], generalNotes: "Sangat baik.", evidenceReference: null });
+    const lines = indicatorsFor({ rows: KPI_V51_CATALOG }, 10).map((row) => ({ indicator_order: row.indicator_order, kpi_name: row.kpi_name, weight_percent: row.weight_percent, target: "", actual: "", raw_score: 5, comment: "" }));
+    await source.createKpiAssessment({ employeeId: ALFA, roleOrder: 10, period: "2026-10", evaluationDate: "2026-10-01", evaluatorName: "x", status: "completed", lines, generalNotes: "Catatan uji.", evidenceReference: "DOC-1" });
 
     const snapshot = await source.loadSnapshot();
     expect(latestTraining(snapshot).find((item) => item.trainingId === "FIX-D4-TRN-001")?.status).toBe("Completed");
     expect(latestDevelopment(snapshot).find((item) => item.needId === "FIX-D4-DEV-001")?.status).toBe("Completed");
-    const before = await latestAlfaAssessment();
+    const before = await latestIsmiAssessment();
     expect(gapFinding(before.findings)).toBe("Gap");
     expect(before.overallStatus).toBe("Gap");
 

@@ -1,7 +1,7 @@
 import { compareCompetencies } from "../competency/service";
 import type { CompetencyAssessment } from "../competency/types";
 import type { DevelopmentNeedVersion, DevelopmentPriority, DevelopmentSourceType, DevelopmentStatus } from "../development/types";
-import { indicatorsFor, KPI_V51_CATALOG, roleForPositionTitle, selectCatalog } from "../kpi/catalog";
+import { indicatorsFor, KPI_V51_CATALOG, roleForPositionTitle } from "../kpi/catalog";
 import type { PerformanceEvaluation, ReviewStatus } from "../performance/types";
 import type {
   CompetencyReference, DepartmentReference, EmployeeReference, EmployeeSkillReference,
@@ -627,7 +627,7 @@ function buildPerformance(): PerformanceEvaluation[] {
 // KPI scorecards (quarterly, KPI V5.1)
 // ---------------------------------------------------------------------------------------------
 
-const catalog = selectCatalog(KPI_V51_CATALOG);
+const catalog = { version: "V5.1", rows: KPI_V51_CATALOG };
 type Indicator = { target: string; actual: (score: number, r: number) => string };
 const pct = (values: readonly number[], suffix = "", decimals = 1, jitter = 0.8, max = 100): Indicator["actual"] =>
   (score, r) => `${idNum(Math.min(max, values[score - 1] + (r - 0.5) * jitter), decimals)}%${suffix}`;
@@ -769,7 +769,7 @@ function buildKpi(): KpiAssessment[] {
       records.push({
         id: uid("kpi", n++), definitionVersion: catalog.version, employeeId: empId(employee.key), roleOrder, roleName: indicatorsFor(catalog, roleOrder)[0].role_name,
         period: quarter.period, evaluationDate, evaluatorName: evaluator, status: "completed", lines, overallScore: demoKpiTotal(lines),
-        generalNotes, createdAt: at(`${evaluationDate} ${String(9 + (hash(seed) % 8)).padStart(2, "0")}:${String(hash(`${seed}m`) % 60).padStart(2, "0")}`), actor: evaluator,
+        generalNotes, evidenceReference: `Rekap KPI ${quarter.period}`, createdAt: at(`${evaluationDate} ${String(9 + (hash(seed) % 8)).padStart(2, "0")}:${String(hash(`${seed}m`) % 60).padStart(2, "0")}`), actor: evaluator,
       });
       if (isRevisionCase) {
         const corrected = lines.map((line) => line.indicator_order === 2 ? { ...line, raw_score: 3, actual: "1 nota pembetulan", comment: "Dikoreksi setelah rekonsiliasi data CEISA." } : line);

@@ -36,7 +36,9 @@ export interface KpiAssessmentInput {
   readonly evaluatorName: string;
   readonly status: "draft" | "completed";
   readonly lines: readonly KpiAssessmentLine[];
+  /** Evaluation notes of the Penilaian Kinerja; required for new records. */
   readonly generalNotes: string;
+  readonly evidenceReference: string | null;
 }
 
 export interface KpiAssessment extends KpiAssessmentInput {

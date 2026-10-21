@@ -8,14 +8,39 @@ export type RoleKpiRow = {
   readonly source_version: string;
 };
 
-export interface KpiCatalog {
-  /** Catalog version actually served. V5.1 is preferred; older versions are a fallback until the V5.1 migration is applied. */
-  readonly version: string;
-  readonly rows: readonly RoleKpiRow[];
+/** A catalog version and the first period (YYYY-MM) it applies to; table d4_kpi_catalog_versions. */
+export interface KpiCatalogVersion {
+  readonly source_version: string;
+  readonly effective_from: string;
 }
 
-/** Version used for new KPI assessments (FR-D4-002 baseline). */
-export const ACTIVE_KPI_VERSION = "V5.1";
+/** HR mapping of a position to its KPI role within one catalog version; table d4_position_kpi_roles. */
+export interface PositionKpiRole {
+  readonly source_version: string;
+  readonly position_id: string;
+  readonly role_order: number;
+}
+
+/** Every catalog version with its rows and position mapping, as served by GET /api/d4/kpi-catalog. */
+export interface KpiCatalogSet {
+  readonly versions: readonly KpiCatalogVersion[];
+  readonly rows: readonly RoleKpiRow[];
+  readonly positionRoles: readonly PositionKpiRole[];
+}
+
+/** The one catalog version that applies to a period. */
+export interface KpiCatalog {
+  readonly version: string;
+  readonly rows: readonly RoleKpiRow[];
+  readonly positionRoles: readonly PositionKpiRole[];
+}
+
+/**
+ * Fixed target of every Core KPI (HR mentor review, 14 Oct 2026: "semua targetnya 85"). The catalog workbook has no
+ * targets, so this is the fallback; a target the catalog does carry wins. The scorer never types a target.
+ */
+export const KPI_TARGET = "85";
+export const targetOf = (row: Pick<RoleKpiRow, "target">): string => row.target ?? KPI_TARGET;
 
 /** KPI Scorecard V5.1, sheet "KPI LIST PER POSISI". Mirrors supabase/migrations/20260929150000_d4_kpi_catalog_v51.sql. */
 export const KPI_V51_CATALOG: readonly RoleKpiRow[] = [
@@ -70,25 +95,47 @@ export const KPI_V51_CATALOG: readonly RoleKpiRow[] = [
   { role_order: 10, role_name: "Finance & Administration", indicator_order: 4, kpi_name: "Efektivitas Collection/Penagihan Piutang", target: null, weight_percent: 15, source_version: "V5.1" },
   { role_order: 10, role_name: "Finance & Administration", indicator_order: 5, kpi_name: "Kerapian Arsip Keuangan & Kepatuhan Pajak", target: null, weight_percent: 15, source_version: "V5.1" },
 ];
-/** Picks the active version when present, otherwise the newest version available in the rows. */
-export function selectCatalog(rows: readonly RoleKpiRow[]): KpiCatalog {
-  const versions = [...new Set(rows.map((row) => row.source_version))].sort().reverse();
-  const version = versions.includes(ACTIVE_KPI_VERSION) ? ACTIVE_KPI_VERSION : versions[0] ?? ACTIVE_KPI_VERSION;
-  return { version, rows: rows.filter((row) => row.source_version === version) };
+/** The version in force for a period: the latest one whose effective_from is not after it. Null when none applies yet. */
+export function catalogFor(set: KpiCatalogSet, period: string): KpiCatalog | null {
+  const version = set.versions.filter((item) => item.effective_from <= period)
+    .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0]?.source_version;
+  if (!version) return null;
+  return { version, rows: set.rows.filter((row) => row.source_version === version), positionRoles: set.positionRoles.filter((item) => item.source_version === version) };
 }
 
-export function rolesOf(catalog: KpiCatalog): { order: number; name: string }[] {
+/** KPI role HR assigned to a position in this version; 0 means the position has no KPI (FR-02.11). */
+export function roleForPosition(catalog: KpiCatalog, positionId: string | null | undefined): number {
+  return catalog.positionRoles.find((item) => item.position_id === positionId)?.role_order ?? 0;
+}
+
+/** First period scored 1–100 (catalog V6). Mirrors supabase/migrations/20261017130000_d4_kpi_scale_100_v6.sql. */
+export const KPI_V6_EFFECTIVE_FROM = "2026-11";
+const KPI_V6_CATALOG: readonly RoleKpiRow[] = KPI_V51_CATALOG.map((row) => ({ ...row, target: KPI_TARGET, source_version: "V6" }));
+
+/** V5.1 up to 2026-10 and V6 (1–100) from 2026-11, positions mapped by title. Local preview and tests only; live data comes from the tables above. */
+export function seedCatalogSet(positions: readonly { id: string; title: string }[]): KpiCatalogSet {
+  const rows = [...KPI_V51_CATALOG, ...KPI_V6_CATALOG];
+  const roleOf = (position: { title: string }) => roleForPositionTitle({ rows: KPI_V51_CATALOG }, position.title);
+  return {
+    versions: [{ source_version: "V5.1", effective_from: "2000-01" }, { source_version: "V6", effective_from: KPI_V6_EFFECTIVE_FROM }], rows,
+    positionRoles: ["V5.1", "V6"].flatMap((version) => positions.map((position) => ({ source_version: version, position_id: position.id, role_order: roleOf(position) }))).filter((item) => item.role_order > 0),
+  };
+}
+
+type Rows = Pick<KpiCatalog, "rows">;
+
+export function rolesOf(catalog: Rows): { order: number; name: string }[] {
   return [...new Map(catalog.rows.map((row) => [row.role_order, row.role_name])).entries()].map(([order, name]) => ({ order, name }));
 }
 
-export function indicatorsFor(catalog: KpiCatalog, roleOrder: number): RoleKpiRow[] {
+export function indicatorsFor(catalog: Rows, roleOrder: number): RoleKpiRow[] {
   return catalog.rows.filter((row) => row.role_order === roleOrder).sort((a, b) => a.indicator_order - b.indicator_order);
 }
 
 const normalise = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-/** Maps an HR position title to a KPI role. Exact title first, then a keyword match; 0 means the position has no KPI in the catalog (FR-02.11). */
-export function roleForPositionTitle(catalog: KpiCatalog, title: string | undefined): number {
+/** Guesses a KPI role from a position title (exact, then keyword). Only seeds d4_position_kpi_roles and the local preview; 0 = no KPI. */
+export function roleForPositionTitle(catalog: Rows, title: string | undefined): number {
   if (!title) return 0;
   const target = normalise(title);
   const roles = rolesOf(catalog);
@@ -96,8 +143,9 @@ export function roleForPositionTitle(catalog: KpiCatalog, title: string | undefi
   if (exact) return exact.order;
   // Whole words only: a bare substring such as "edi" would also match "Credit" or "Media". "Admin" is not a
   // finance keyword: "HR Administrator" or "Admin Staff" are not Finance & Administration roles.
+  // Cash, tax and customer success follow the roles HR set for those org titles.
   const keywords: [RegExp, RegExp][] = [
-    [/\b(sales|marketing)\b/, /\bsales\b/], [/\b(finance|accounting)\b/, /\bfinance\b/],
+    [/\b(sales|marketing|customer success)\b/, /\bsales\b/], [/\b(finance|accounting|cash|tax)\b/, /\bfinance\b/],
     [/\b(customs|ppjk)\b/, /\bcustoms\b/], [/\b(warehouse|warehousing|logistic|logistics)\b/, /\bwarehous(e|ing)\b/],
     [/\b(air|sea)?freight\b/, /\b(air|sea)?freight\b/], [/\b(implant|edi|manifest)\b/, /\bimplant\b/],
     [/\bbranch\b/, /\bbranch\b/], [/\boperations director\b/, /\boperations director\b/], [/\b(ceo|vice president)\b/, /\bceo\b/], [/^director\b/, /^director\b/],

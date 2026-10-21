@@ -12,6 +12,7 @@ export async function listCompetency(request: Request) {
 export async function createCompetency(request: Request) {
   const { repository } = await requireWriter();
   const body = await readJson(request);
-  const input = { employeeId: field.uuid(body, "employeeId"), positionId: field.uuid(body, "positionId"), effectiveDate: field.date(body, "effectiveDate") };
+  const input = { employeeId: field.uuid(body, "employeeId"), positionId: field.uuid(body, "positionId"), effectiveDate: field.date(body, "effectiveDate"),
+    assessedWith: field.text(body, "assessedWith", { required: false, max: 200 }).trim() };
   return { id: await repository.saveCompetency(input, await repository.loadReferenceData()) };
 }

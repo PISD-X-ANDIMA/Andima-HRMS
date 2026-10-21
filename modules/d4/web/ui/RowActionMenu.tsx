@@ -16,7 +16,7 @@ export type RowAction = {
   hidden?: boolean;
 };
 
-const MENU_WIDTH = 224;
+const MENU_WIDTH = 304; // fits the longest label, "Create Development Requirement", on one line
 
 /**
  * The single row-action pattern for D4 (reviewer note K2): the ⋮ button opens a short
