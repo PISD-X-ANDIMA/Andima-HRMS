@@ -127,3 +127,15 @@ logs/
 .history/
 .npm/
 .pnpm-store/
+
+# private migration notes and data (stay outside the repo)
+HANDOFF.md
+**/HANDOFF.md
+laporan_*.md
+**/laporan_*.md
+*-design.md
+*_plan.md
+/neon/
+/docs/superpowers/
+database/neon/*data*.sql
+neon.env
