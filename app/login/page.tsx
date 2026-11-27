@@ -4,6 +4,7 @@ import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
+import { useGreeting } from '@/lib/greeting';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,10 +19,7 @@ export default function LoginPage() {
   const [isPermanentlyBlocked, setIsPermanentlyBlocked] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number>(0);
   const [sessionEndNotice, setSessionEndNotice] = useState<string>('');
-  const [greeting] = useState<string>(() => {
-    const hour = new Date().getHours();
-    return hour >= 3 && hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
-  });
+  const greeting = useGreeting();
 
   useEffect(() => {
     const reason = new URLSearchParams(window.location.search).get('reason');
@@ -213,7 +211,8 @@ export default function LoginPage() {
             {/* Greeting */}
             <div className="mb-7 text-left relative z-10">
               <h2 className="font-[family-name:var(--font-syne)] text-xl sm:text-2xl font-bold text-[#0D1B2A] tracking-tight">
-                {greeting},
+                {/* Empty until the browser knows its local hour; the nbsp keeps the line height. */}
+                {greeting ? `${greeting},` : ' '}
               </h2>
               <p className="font-[family-name:var(--font-montserrat)] text-sm text-[#334155] mt-1.5 font-medium">
                 Please sign in with your registered account to access the dashboard.
