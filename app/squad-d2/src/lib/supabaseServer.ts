@@ -13,7 +13,7 @@ export function getSupabaseUrl(): string {
   return (
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
-    'https://ufjbbwqaztgkqmpdmcyv.supabase.co'
+    ''
   );
 }
 
@@ -22,7 +22,7 @@ export function getSupabaseKey(): string {
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmamJid3FhenRna3FtcGRtY3l2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDAzMTM2NywiZXhwIjoyMTA1NjA3MzY3fQ.qbUVYCttTseHC_9v1hEY9dTh75E3hDtx5DuYw2hqdXQ'
+    ''
   );
 }
 
@@ -593,6 +593,40 @@ export async function updateCandidateStatusAndLog(params: {
       auditLogId = auditResult[0]?.id;
     } else {
       console.warn('[Squad D2 Supabase] Warning: Audit log entry failed to record:', await auditRes.text());
+    }
+
+    // 3. Record Rejection into d2_application_history if rejected (FR-D2-005 FR-05.5, TR-10 Read-Only)
+    if (newStatus === 'rejected' && updatedCandidate) {
+      try {
+        const historyPayload = {
+          candidate_id: candidateId,
+          email: updatedCandidate.email,
+          nik: updatedCandidate.nik || null,
+          full_name: updatedCandidate.full_name,
+          job_id: updatedCandidate.job_id || null,
+          job_title: updatedCandidate.job_title || 'Unknown Position',
+          application_date: nowIso,
+          application_round: updatedCandidate.application_count || 1,
+          status: 'rejected',
+          assessment_score: null,
+          assessment_notes: `Tahap seleksi: ${oldStatus} -> rejected`,
+          rejection_reason: reason || 'Kandidat belum memenuhi kualifikasi standar.',
+          is_read_only: true,
+          is_deleted: false,
+        };
+
+        await fetch(`${baseUrl}/rest/v1/d2_application_history`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(historyPayload),
+        });
+      } catch (histErr) {
+        console.warn('[Squad D2 Supabase] Warning: Failed to record rejection into d2_application_history:', histErr);
+      }
     }
 
     const totalElapsed = Date.now() - startTime;

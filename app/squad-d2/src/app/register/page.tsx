@@ -27,6 +27,7 @@ function RegistrationFormContent() {
   const [selectedJob, setSelectedJob] = useState<JobPost | null>(null);
 
   const [fullName, setFullName] = useState('');
+  const [nik, setNik] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [registrationWay, setRegistrationWay] = useState<RegistrationWayUi>('recommendation');
@@ -36,11 +37,13 @@ function RegistrationFormContent() {
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<{ message: string; candidateId?: string } | null>(null);
+  const [registeredEmailPopup, setRegisteredEmailPopup] = useState<string | null>(null);
 
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const fullNameId = useId();
+  const nikId = useId();
   const emailId = useId();
 
   // Find job information via /api/squad-d2/jobs endpoint if jobId is present
@@ -91,6 +94,10 @@ function RegistrationFormContent() {
       errors.email = 'Email must be filled!';
     } else if (!emailRegex.test(email.trim())) {
       errors.email = 'Invalid email format (example: nama@domain.com).';
+    }
+
+    if (nik.trim() && !/^\d{16}$/.test(nik.trim())) {
+      errors.nik = 'NIK must be exactly 16 digits numerical (sesuai KTP).';
     }
 
     if (!selectedFile) {
@@ -161,6 +168,7 @@ function RegistrationFormContent() {
 
   const resetForm = () => {
     setFullName('');
+    setNik('');
     setEmail('');
     setPhoneNumber('');
     setRegistrationWay('recommendation');
@@ -185,6 +193,7 @@ function RegistrationFormContent() {
 
     const formData = new FormData();
     formData.append('fullName', fullName);
+    if (nik.trim()) formData.append('nik', nik.trim());
     formData.append('email', email);
     if (phoneNumber) formData.append('phoneNumber', phoneNumber);
     formData.append('registrationWay', registrationWay);
@@ -192,6 +201,8 @@ function RegistrationFormContent() {
       formData.append('jobId', jobId);
     }
     formData.append('cvFile', selectedFile);
+
+    const submittedEmail = email.trim();
 
     startTransition(async () => {
       try {
@@ -213,6 +224,7 @@ function RegistrationFormContent() {
           }
           setServerError(result.message || 'Gagal mengirim pendaftaran.');
         } else {
+          setRegisteredEmailPopup(submittedEmail);
           setSuccessInfo({
             message: result.message,
             candidateId: result.candidateId,
@@ -425,6 +437,53 @@ function RegistrationFormContent() {
               )}
             </div>
 
+            {/* FIELD 2.5: NIK (Nomor Induk Kependudukan - FR-D2-005: 16 Digits) */}
+            <div className="w-full">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#3b82f6] shrink-0" />
+                  <label htmlFor={nikId} className="text-xs font-bold tracking-wider text-slate-800 uppercase">
+                    NIK (NOMOR INDUK KEPENDUDUKAN)
+                  </label>
+                </div>
+                <span className="text-[11px] text-slate-400 font-normal">Kunci Pendeteksi Sekunder (16 Digit)</span>
+              </div>
+
+              <div
+                className={`relative rounded-2xl border border-neutral-700 bg-neutral-100 transition-all duration-150 shadow-[1px_2px_0px_rgba(0,0,0,0.35)] focus-within:shadow-[1px_3px_0px_rgba(59,130,246,0.6)] focus-within:border-blue-600 w-full ${
+                  clientErrors.nik ? 'border-rose-500 shadow-[1px_2px_0px_rgba(239,68,68,0.4)]' : ''
+                }`}
+              >
+                <input
+                  id={nikId}
+                  name="nik"
+                  type="text"
+                  maxLength={16}
+                  value={nik}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setNik(val);
+                    if (clientErrors.nik) {
+                      setClientErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.nik;
+                        return n;
+                      });
+                    }
+                  }}
+                  placeholder="Enter 16-digit NIK (contoh: 320101...)..."
+                  className="w-full h-14 md:h-16 px-5 bg-transparent text-sm md:text-base font-normal text-slate-800 placeholder:text-neutral-400 focus:outline-none rounded-2xl"
+                  disabled={isPending}
+                />
+              </div>
+              {clientErrors.nik && (
+                <p className="mt-1.5 text-xs text-rose-600 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{clientErrors.nik}</span>
+                </p>
+              )}
+            </div>
+
             {/* ================================================================= */}
             {/* FIELD 3: CURRICULUM VITAE (PDF) - FULL WIDTH DROPZONE             */}
             {/* ================================================================= */}
@@ -620,6 +679,53 @@ function RegistrationFormContent() {
           </form>
         </div>
       </main>
+
+      {/* Pop up Notifikasi Pendaftaran Berhasil */}
+      {registeredEmailPopup && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+        >
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 sm:p-8 shadow-2xl border border-slate-100 flex flex-col items-center text-center transform transition-all animate-in zoom-in-95 duration-200">
+            {/* Tombol X untuk menutup pop up notif */}
+            <button
+              type="button"
+              onClick={() => setRegisteredEmailPopup(null)}
+              className="absolute top-4 right-4 rounded-full p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              aria-label="Tutup notifikasi"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Icon status */}
+            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4 shadow-xs">
+              <CheckCircle2 className="w-9 h-9" />
+            </div>
+
+            {/* Judul Notifikasi */}
+            <h3 className="text-xl font-extrabold text-slate-900 mb-2">
+              Pendaftaran Berhasil!
+            </h3>
+
+            {/* Isi Notifikasi sesuai instruksi user */}
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Anda telah terdaftar. Silahkan check email (<span className="font-bold text-blue-600 break-all">{registeredEmailPopup}</span>) anda!
+            </p>
+
+            {/* Tombol aksi */}
+            <div className="mt-6 w-full">
+              <button
+                type="button"
+                onClick={() => setRegisteredEmailPopup(null)}
+                className="w-full py-3 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all hover:scale-[1.01]"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

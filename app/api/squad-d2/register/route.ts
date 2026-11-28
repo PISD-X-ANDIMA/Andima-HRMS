@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { 
   uploadApplicantCv, 
   insertCandidate, 
-  getActiveJobPostId 
+  getActiveJobPostId,
+  getJobPostById 
 } from '@/app/squad-d2/src/lib/supabaseServer';
 import { 
   CandidateSubmissionResult, 
@@ -12,7 +13,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 // ==============================================================================
-// 1. Rate Limiting Check (10 requests / IP / minute)
+// 1. Rate Limiting Check (10 requests / IP / minute - TR-D2-001 TR-07)
 // ==============================================================================
 interface RateLimitRecord {
   count: number;
@@ -39,7 +40,7 @@ function checkRateLimit(ip: string, limit = 10, windowMs = 60 * 1000): boolean {
 }
 
 // ==============================================================================
-// 2. Input Sanitization
+// 2. Input Sanitization (TR-D2-001 TR-08)
 // ==============================================================================
 function sanitizeText(input: string): string {
   if (!input) return '';
@@ -63,13 +64,14 @@ const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-
 /**
  * POST /api/squad-d2/register
  * Memproses pendaftaran pelamar multi-jalur, upload CV ke Supabase Storage,
- * dan menyimpan profil ke tabel d2_candidates di Supabase.
+ * mendeteksi pelamar berulang berbasis Email/NIK (< 100ms TR-D2-002 TR-08),
+ * menyimpan ke tabel d2_candidates, dan menyinkronkan ke d2_application_history (FR-D2-005).
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const actionStartTime = Date.now();
 
   try {
-    // 1. Rate Limiting
+    // 1. Rate Limiting Check (TR-D2-001 TR-07: max 10 requests / IP / minute)
     const forwardedFor = request.headers.get('x-forwarded-for');
     const realIp = request.headers.get('x-real-ip');
     const clientIp = (forwardedFor ? forwardedFor.split(',')[0].trim() : realIp) || '127.0.0.1';
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // 2. Extract Data from Content-Type
     const contentType = request.headers.get('content-type') || '';
     let rawFullName = '';
+    let rawNik = '';
     let rawEmail = '';
     let rawPhoneNumber = '';
     let rawRegistrationWay = '';
@@ -100,6 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       rawFullName = (formData.get('fullName') as string) || '';
+      rawNik = (formData.get('nik') as string) || (formData.get('nikNumber') as string) || '';
       rawEmail = (formData.get('email') as string) || '';
       rawPhoneNumber = (formData.get('phoneNumber') as string) || '';
       rawRegistrationWay = (formData.get('registrationWay') as string) || '';
@@ -113,6 +117,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } else if (contentType.includes('application/json')) {
       const json = await request.json();
       rawFullName = json.fullName || '';
+      rawNik = json.nik || json.nikNumber || '';
       rawEmail = json.email || '';
       rawPhoneNumber = json.phoneNumber || '';
       rawRegistrationWay = json.registrationWay || '';
@@ -136,7 +141,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 3. Validations
+    // 3. Validations (FR-D2-005 Validation Rules Matrix & FR-D2-001)
     const errors: Record<string, string[]> = {};
     const fullName = sanitizeText(rawFullName);
     if (!fullName) {
@@ -156,8 +161,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       errors.email = ['Email maksimal 255 karakter.'];
     }
 
+    // NIK validation (FR-D2-005: 16 digits numerical)
+    const nik = rawNik ? sanitizeText(rawNik).replace(/\D/g, '') : null;
+    if (rawNik && (!nik || nik.length !== 16)) {
+      errors.nik = ['NIK Pelamar harus berupa tepat 16 digit angka (sesuai standar KTP).'];
+    }
+
     const dbRegistrationWay = normalizeRegistrationWay(rawRegistrationWay);
 
+    // TR-D2-001 TR-06: MIME application/pdf, max 5 MB, PDF header signature verification
     if (!fileArrayBuffer || fileArrayBuffer.byteLength === 0) {
       errors.cvFile = ['File Curriculum Vitae (PDF) wajib diunggah.'];
     } else {
@@ -188,7 +200,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // 4. Resolve Active Job ID from d1_job_positions
     const validJobId = await getActiveJobPostId(rawJobId || undefined);
 
-    // 5. Upload Resume to Supabase Storage
+    // 5. Upload Resume to Supabase Storage (TR-D2-001 TR-05, TR-06)
     const fileUuid = crypto.randomUUID();
     const storagePath = `resumes/${fileUuid}.pdf`;
 
@@ -204,16 +216,94 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 6. Insert Candidate into Supabase Database
+    // ==============================================================================
+    // 5.5. Detect Repeat Applicant (FR-D2-005 FR-05.1 & TR-D2-002 TR-08 < 100ms)
+    // Identity Matching: Email OR NIK match against d2_candidates & d2_application_history
+    // ==============================================================================
+    const baseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ufjbbwqaztgkqmpdmcyv.supabase.co').replace(/\/$/, '');
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_0GFbshHOM6k80Wxde_iZVQ_v6DpVj1D';
+
+    const filterQuery = nik
+      ? `or=(email.eq.${encodeURIComponent(email)},nik.eq.${encodeURIComponent(nik)})`
+      : `email=eq.${encodeURIComponent(email)}`;
+
+    let totalPrior = 0;
+    let maxCandidateRound = 0;
+    let maxHistoryRound = 0;
+
+    const lookupStart = Date.now();
+    try {
+      // Execute parallel lookups across d2_candidates and d2_application_history
+      const [candCheckRes, histCheckRes] = await Promise.all([
+        fetch(
+          `${baseUrl}/rest/v1/d2_candidates?${filterQuery}&select=id,application_count,status`,
+          {
+            headers: {
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+            },
+            cache: 'no-store',
+          }
+        ),
+        fetch(
+          `${baseUrl}/rest/v1/d2_application_history?${filterQuery}&is_deleted=eq.false&select=id,application_round,status`,
+          {
+            headers: {
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey,
+            },
+            cache: 'no-store',
+          }
+        ),
+      ]);
+
+      const lookupElapsed = Date.now() - lookupStart;
+      if (lookupElapsed > 100) {
+        console.warn(`[TR-D2-002 TR-08] Repeat applicant lookup took ${lookupElapsed}ms (target < 100ms)`);
+      }
+
+      if (candCheckRes.ok) {
+        const candRows = await candCheckRes.json();
+        if (Array.isArray(candRows) && candRows.length > 0) {
+          totalPrior += candRows.length;
+          maxCandidateRound = candRows.reduce(
+            (max: number, r: any) => Math.max(max, r.application_count || 1),
+            0
+          );
+        }
+      }
+
+      if (histCheckRes.ok) {
+        const histRows = await histCheckRes.json();
+        if (Array.isArray(histRows) && histRows.length > 0) {
+          totalPrior += histRows.length;
+          maxHistoryRound = histRows.reduce(
+            (max: number, r: any) => Math.max(max, r.application_round || 1),
+            0
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[Squad D2 API] Warning during repeat applicant check:', err);
+    }
+
+    // FR-D2-005 3.b.ii: Cumulative count: total prior records + 1 active = Pelamar ke-X
+    const applicationCount = Math.max(totalPrior, maxCandidateRound, maxHistoryRound) + 1;
+    const isRepeatApplicant = applicationCount >= 2;
+    const repeatLabel = isRepeatApplicant ? `Pelamar ke-${applicationCount} Kali` : 'Kandidat Baru';
+
+    // 6. Insert Candidate into Supabase Database (d2_candidates)
     const insertResult = await insertCandidate({
       job_id: validJobId,
       full_name: fullName,
+      nik: nik || null,
       email: email,
       phone_number: rawPhoneNumber ? sanitizeText(rawPhoneNumber) : null,
       registration_way: dbRegistrationWay,
       cv_file_path: uploadResult.data?.path || storagePath,
       stage: 'screening',
       status: 'applied',
+      application_count: applicationCount,
     });
 
     if (insertResult.error) {
@@ -227,13 +317,53 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const elapsedTotal = Date.now() - actionStartTime;
+    // 6.5. Synchronize initial record to d2_application_history (FR-D2-005 FR-05.6, TR-10 Read-Only)
+    if (insertResult.data?.id) {
+      try {
+        const jobInfo = await getJobPostById(validJobId);
+        const historyPayload = {
+          candidate_id: insertResult.data.id,
+          email: email,
+          nik: nik || null,
+          full_name: fullName,
+          job_id: validJobId,
+          job_title: jobInfo?.title || 'Specialized Position',
+          application_date: new Date().toISOString(),
+          application_round: applicationCount,
+          status: 'applied',
+          is_read_only: true,
+          is_deleted: false,
+        };
 
-    const result: CandidateSubmissionResult = {
+        await fetch(`${baseUrl}/rest/v1/d2_application_history`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(historyPayload),
+        });
+      } catch (histInsertErr) {
+        console.warn('[Squad D2 API] Warning: Failed to record into d2_application_history:', histInsertErr);
+      }
+    }
+
+    const elapsedTotal = Date.now() - actionStartTime;
+    if (elapsedTotal > 500) {
+      console.warn(`[TR-D2-002 TR-05] Registration execution took ${elapsedTotal}ms (target < 500ms)`);
+    }
+
+    const result = {
       success: true,
-      message: 'Pendaftaran Anda berhasil dikirim! Tim rekrutmen PT Andima Transportindo akan segera meninjau berkas Anda.',
+      message: isRepeatApplicant
+        ? `Pendaftaran Anda berhasil dikirim! Sistem mengenali riwayat Anda sebagai ${repeatLabel}. Tim rekrutmen PT Andima Transportindo akan meninjau berkas Anda.`
+        : 'Pendaftaran Anda berhasil dikirim! Tim rekrutmen PT Andima Transportindo akan segera meninjau berkas Anda.',
       candidateId: insertResult.data?.id,
       cvFilePath: uploadResult.data?.path,
+      isRepeatApplicant,
+      applicationCount,
+      repeatLabel,
       timestamp: new Date().toISOString(),
     };
 
@@ -250,3 +380,4 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 }
+

@@ -18,7 +18,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onApply }) => {
     if (onApply) {
       onApply(job);
     } else {
-      router.push(`/register?jobId=${encodeURIComponent(job.id)}`);
+      router.push(`/registration-form?jobId=${encodeURIComponent(job.id)}`);
     }
   };
 

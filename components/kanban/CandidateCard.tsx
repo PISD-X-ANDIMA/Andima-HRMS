@@ -161,10 +161,10 @@ export const CandidateCard: React.FC<CandidateCardProps> = ({
           </span>
         )}
 
-        {/* 3. History Badges (FR-D2-005) */}
+        {/* 3. History Badges (FR-D2-005 FR-05.2) */}
         {isRepeater && (
           <span className="inline-flex items-center px-3.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#d97706] text-white shadow-xs">
-            Repeater
+            Pelamar ke-{candidate.application_count || 2} Kali
           </span>
         )}
 

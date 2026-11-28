@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
         destination: '/squad-d2/src/app/jobs',
       },
       {
-        source: '/register',
+        source: '/registration-form',
         destination: '/squad-d2/src/app/register',
       },
       {

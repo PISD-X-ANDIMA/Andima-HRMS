@@ -69,7 +69,7 @@ function HrmsLink({ label, href }: { label: string; href: string }) {
   const pathname = usePathname();
   const isActive =
     pathname === href ||
-    (href === "/jobs" && (pathname === "/register" || pathname.startsWith("/jobs") || pathname.startsWith("/register") || pathname.startsWith("/squad-d2/src/app/jobs") || pathname.startsWith("/squad-d2/src/app/register"))) ||
+    (href === "/jobs" && (pathname === "/registration-form" || pathname === "/register" || pathname.startsWith("/jobs") || pathname.startsWith("/registration-form") || pathname.startsWith("/register") || pathname.startsWith("/squad-d2/src/app/jobs") || pathname.startsWith("/squad-d2/src/app/register"))) ||
     (href === "/kanban" && (pathname === "/fit-proper" || pathname.startsWith("/kanban") || pathname.startsWith("/fit-proper") || pathname.startsWith("/squad-d2/src/app/kanban") || pathname.startsWith("/squad-d2/src/app/fit-proper")));
 
   return (
@@ -81,7 +81,7 @@ function HrmsLink({ label, href }: { label: string; href: string }) {
           : "text-[#d9e2fc]/80 hover:bg-[#1e3765] hover:text-white"
       }`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-[#0550D7]" : "bg-transparent"}`} />
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? "bg-[#069494]" : "bg-transparent"}`} />
       <span>{label}</span>
     </Link>
   );
@@ -132,6 +132,7 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
   ].includes(pathname);
   const isD2Route = [
     "/jobs",
+    "/registration-form",
     "/register",
     "/kanban",
     "/fit-proper",
@@ -139,7 +140,7 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
     "/squad-d2/src/app/register",
     "/squad-d2/src/app/kanban",
     "/squad-d2/src/app/fit-proper",
-  ].includes(pathname) || pathname.startsWith("/jobs") || pathname.startsWith("/register") || pathname.startsWith("/kanban") || pathname.startsWith("/fit-proper");
+  ].includes(pathname) || pathname.startsWith("/jobs") || pathname.startsWith("/registration-form") || pathname.startsWith("/register") || pathname.startsWith("/kanban") || pathname.startsWith("/fit-proper");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHrmsOpen, setIsHrmsOpen] = useState(true);
   const [isD3Open, setIsD3Open] = useState(false);
@@ -351,7 +352,6 @@ export default function Sidebar({ userName, userRole, userInitials, onSignOut, i
             aria-label="Logout"
             title="Logout"
           >
-            <span className="w-5 h-5 rounded-full bg-black text-[10px] font-bold flex items-center justify-center text-white shrink-0">N</span>
             <span>Logout</span>
           </button>
         </div>

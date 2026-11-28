@@ -71,6 +71,24 @@ export interface FitProperRequirement {
   created_at: string;
 }
 
+export interface ApplicationHistoryItem {
+  id: string;
+  candidate_id?: string;
+  email: string;
+  nik?: string | null;
+  full_name: string;
+  job_id?: string;
+  job_title: string;
+  application_date: string;
+  application_round: number;
+  status: string;
+  assessment_score?: number | null;
+  assessment_notes?: string | null;
+  rejection_reason?: string | null;
+  is_read_only: boolean;
+  is_deleted?: boolean;
+}
+
 
 export interface AuditLog {
   id: string;

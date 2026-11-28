@@ -18,27 +18,18 @@ export default function JobListPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
-  // Load jobs on initial mount via /api/squad-d2/jobs endpoint
+  // Load jobs on initial mount
   useEffect(() => {
     let isMounted = true;
     startTransition(async () => {
       try {
-        const res = await fetch('/api/squad-d2/jobs');
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && isMounted) {
-            setJobs(json.data || []);
-            setIsLoading(false);
-            return;
-          }
-        }
         const fetched = await getJobsAction();
         if (isMounted) {
           setJobs(fetched);
           setIsLoading(false);
         }
       } catch (err) {
-        console.error('Failed to load jobs from API:', err);
+        console.error('Failed to load jobs:', err);
         if (isMounted) {
           setIsLoading(false);
         }
@@ -77,12 +68,21 @@ export default function JobListPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col text-slate-800 font-sans antialiased">
-      {/* Top Navigation Bar */}
-      <Header onMenuClick={() => window.dispatchEvent(new Event('open-sidebar'))} />
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col lg:flex-row text-slate-800 font-sans antialiased">
+      {/* ========================================================================= */}
+      {/* 1. SIDEBAR NAVIGASI KIRI (Dark Navy #0b1329)                             */}
+      {/* ========================================================================= */}
+      <Sidebar />
 
-      {/* Main Content Body */}
-      <main className="flex-1 px-4 sm:px-6 md:px-10 lg:px-12 py-8 w-full max-w-7xl mx-auto">
+      {/* ========================================================================= */}
+      {/* 2. AREA KONTEN UTAMA                                                      */}
+      {/* ========================================================================= */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Top Navigation Bar */}
+        <Header onMenuClick={() => setSidebarOpen(true)} />
+
+        {/* Main Content Body */}
+        <main className="flex-1 px-4 sm:px-6 md:px-10 lg:px-12 py-8 max-w-7xl w-full mx-auto">
           {/* Header Title & Description Section */}
           <div className="mb-6">
             <h1 className="text-[32px] font-bold text-slate-900 tracking-tight leading-tight">
@@ -186,6 +186,7 @@ export default function JobListPage() {
             </div>
           )}
         </main>
+      </div>
     </div>
   );
 }

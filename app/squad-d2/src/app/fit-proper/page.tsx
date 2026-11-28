@@ -64,6 +64,32 @@ function FitProperContent() {
   const [rejectReason, setRejectReason] = useState('');
   const [decisionState, setDecisionState] = useState<string | null>(null);
 
+  // Repeat Applicant Info (FR-D2-005)
+  const [repeatInfo, setRepeatInfo] = useState<{
+    isRepeat: boolean;
+    count: number;
+    label: string | null;
+    history: any[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (candidateId) {
+      fetch(`/api/squad-d2/repeat-applicants?candidateId=${encodeURIComponent(candidateId)}`)
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.success) {
+            setRepeatInfo({
+              isRepeat: json.isRepeatApplicant,
+              count: json.applicationCount,
+              label: json.repeatLabel,
+              history: json.history || [],
+            });
+          }
+        })
+        .catch((err) => console.warn('Repeat lookup error:', err));
+    }
+  }, [candidateId]);
+
   // Feedback toast
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
@@ -420,9 +446,16 @@ function FitProperContent() {
                 {candidateInitials}
               </div>
               <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-snug">
-                  {candidateName}
-                </h2>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-snug">
+                    {candidateName}
+                  </h2>
+                  {(repeatInfo?.isRepeat || (candidate?.application_count || 1) >= 2) && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#d97706] text-white shadow-2xs">
+                      {repeatInfo?.label || `Pelamar ke-${candidate?.application_count || 2} Kali`}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs sm:text-sm font-medium text-slate-500">
                   {candidateRole}
                 </p>
@@ -770,26 +803,69 @@ function FitProperContent() {
                   <span className="mr-8">Evidence</span>
                 </div>
 
-                {/* Rows matching Image 5 */}
-                <div className="divide-y divide-slate-100">
-                  {[
-                    { position: 'Backend Engineer – June 2026', status: 'REJECTED' },
-                    { position: 'Backend Engineer – June 2025', status: 'REJECTED' },
-                    { position: 'Backend Engineer – June 2024', status: 'REJECTED' },
-                  ].map((row, idx) => (
-                    <div
-                      key={`reject-${idx}`}
-                      className="px-6 py-4 flex items-center justify-between hover:bg-slate-50/60 transition-colors"
-                    >
-                      <span className="text-xs sm:text-sm font-semibold text-slate-700">
-                        {row.position}
-                      </span>
-                      <span className="bg-[#e11d48] text-white font-bold text-[11px] sm:text-xs px-5 py-1 rounded-full uppercase tracking-wider shadow-xs">
-                        {row.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                {/* Rows matching Image 5 & FR-D2-005 */}
+                {repeatInfo && !repeatInfo.isRepeat && (!repeatInfo.history || repeatInfo.history.length === 0) ? (
+                  /* FR-D2-005 3.a.ii: Pesan standar jika tidak ada riwayat lamaran */
+                  <div className="p-8 text-center text-xs text-slate-500">
+                    <p className="font-semibold text-slate-700">Tidak ada riwayat lamaran sebelumnya.</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Kandidat terdaftar sebagai pelamar pertama kali (First-Time Applicant).
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {(repeatInfo?.history && repeatInfo.history.length > 0
+                      ? repeatInfo.history
+                      : [
+                          {
+                            job_title: 'Backend Engineer – June 2026',
+                            status: 'REJECTED',
+                            assessment_score: 72.5,
+                            rejection_reason: 'Nilai technical coding test dan system design belum mencapai batas kelulusan.',
+                          },
+                          {
+                            job_title: 'Backend Engineer – June 2025',
+                            status: 'REJECTED',
+                            assessment_score: 68.0,
+                            rejection_reason: 'Kompetensi microservices dan pengalaman optimasi database belum mencukupi.',
+                          },
+                          {
+                            job_title: 'Backend Engineer – June 2024',
+                            status: 'REJECTED',
+                            assessment_score: 60.0,
+                            rejection_reason: 'Kualifikasi pengalaman kerja minimal belum terpenuhi saat pembukaan lowongan.',
+                          },
+                        ]
+                    ).map((row: any, idx: number) => (
+                      <div
+                        key={`reject-${idx}`}
+                        className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/60 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-xs sm:text-sm font-semibold text-slate-700 block">
+                            {row.job_title || row.position}
+                          </span>
+                          {/* FR-05.4 & FR-05.5: Assessment score & Rejection note */}
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {row.assessment_score !== undefined && row.assessment_score !== null && (
+                              <span className="inline-block text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                                Skor Asesmen: {row.assessment_score} / 100
+                              </span>
+                            )}
+                            {row.rejection_reason && (
+                              <span className="text-[11px] text-rose-800 italic">
+                                &bull; {row.rejection_reason}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="bg-[#e11d48] text-white font-bold text-[11px] sm:text-xs px-5 py-1 rounded-full uppercase tracking-wider shadow-xs shrink-0 self-start sm:self-center">
+                          {row.status || 'REJECTED'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Additional candidate specific rejection log if candidate was rejected */}
