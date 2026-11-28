@@ -48,3 +48,7 @@ CLAUDE.md
 # Supabase CLI local cache
 /supabase/.temp/
 .claude/
+
+# Neon migration data and connection strings stay outside the repo
+database/neon/**/*data*.sql
+neon.env
