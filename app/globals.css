@@ -1,26 +1,71 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * D4 V2 design tokens. Values mirror the "D4 V2 Tokens" variable collection in
+ * Figma (PISD – D4 V2), which follows the D2 colour identity.
+ */
+@theme {
+  /* Sidebar follows the shared "GENERAL SIDEBAR" (PISD page A, node 2469:1744). */
+  --color-nav: #0f2342;
+  --color-nav-2: #1e3765;
+  --color-nav-text: #cbd5e1;
+  --color-nav-label: #94a3b8;
+  --color-nav-active: #2563eb;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-primary-50: #f1f3ff;
+  --color-primary-100: #d9e2fc;
+  --color-primary-500: #3b6ff5;
+  --color-primary-600: #155dfc;
+  --color-primary-700: #0550d7;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-app: #f8f9fc;
+  --color-surface: #ffffff;
+  --color-muted: #f1f5f9;
+
+  --color-ink: #0f172b;
+  --color-ink-2: #45556c;
+  --color-ink-3: #64748b;
+
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+  /* PISD design system (Figma "design system"): highlighted option or menu item, rgba(195,198,215,.7) on white. */
+  --color-selected: #d5d7e3;
+
+  /* Tone colours are mostly text on their own -bg tint (badges, notices). The Figma values (#16a37a, #b57f0f, #d9364f,
+     #3b6ff5, #64748b) reached only 2.9-4.3:1 there, so each is darkened, same hue, to >= 4.6:1 on the tint and on white. */
+  --color-success: #107a5b;
+  --color-success-bg: #e7f7f1;
+  --color-warning: #8d630c;
+  --color-warning-bg: #fdf4e3;
+  --color-danger: #cd2740;
+  --color-danger-bg: #fcebee;
+  --color-info: #235df4;
+  --color-info-bg: #eaf0ff;
+  --color-neutral: #5d6c82;
+  --color-neutral-bg: #f1f5f9;
+  --color-teal: #069494;
+  /* D3 avatar accent: employee initials on green, signed-in user on mint. */
+  --color-avatar: #16a37a;
+  --color-avatar-me-bg: #b4f9ca;
+  --color-avatar-me: #0b6b4f;
+  --color-people: #c94fea;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-poppins), ui-sans-serif, sans-serif;
+
+  --shadow-card: 0 8px 24px rgb(21 93 252 / 0.08);
+  --shadow-modal: 0 24px 48px rgb(15 23 43 / 0.2);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-app);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Click feedback: only the button background darkens while pressed; text colour stays. */
+@layer base {
+  button:not(:disabled):active {
+    background-image: linear-gradient(rgb(15 35 66 / 0.1), rgb(15 35 66 / 0.1));
+  }
 }

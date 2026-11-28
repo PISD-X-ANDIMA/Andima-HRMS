@@ -1,0 +1,9 @@
+{
+  "name": "D4 V2 Screen Builder",
+  "id": "d4-v2-screen-builder-local",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] }
+}

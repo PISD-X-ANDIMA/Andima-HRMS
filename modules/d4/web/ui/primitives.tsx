@@ -1,0 +1,121 @@
+"use client";
+
+import Link from "next/link";
+import { Link2 } from "lucide-react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { sourceText, useLanguage } from "../i18n/LanguageProvider";
+
+export const cx = (...values: (string | false | null | undefined)[]) => values.filter(Boolean).join(" ");
+
+/** Stable data-testid part from a visible label (Katalon XPath): "Add Scorecard" -> "add-scorecard". */
+export const slug = (text: string) => text.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const autoId = (prefix: string, children: ReactNode) => typeof children === "string" ? `${prefix}-${slug(sourceText(children))}` : undefined;
+
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+const buttonStyles: Record<ButtonVariant, string> = {
+  primary: "bg-primary-600 text-white hover:bg-primary-700 disabled:bg-muted disabled:text-ink-3",
+  // Design system secondary button: #f8f9fc fill with a #3b6ff5 outline. The label is one step darker (#155dfc), since
+  // #3b6ff5 text on that fill is 4.0:1, under the 4.5:1 a 14 px label needs.
+  secondary: "border border-primary-500 bg-app text-primary-600 hover:bg-primary-50 disabled:border-line-strong disabled:text-ink-3",
+  danger: "bg-danger text-white hover:brightness-95 disabled:bg-muted disabled:text-ink-3",
+  ghost: "bg-primary-50 text-primary-600 hover:bg-primary-100 disabled:bg-muted disabled:text-ink-3",
+};
+const buttonBase = "inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 disabled:cursor-not-allowed";
+
+export function Button({ variant = "primary", icon, children, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; icon?: ReactNode }) {
+  return <button type="button" data-testid={autoId("btn", children)} {...props} className={cx(buttonBase, buttonStyles[variant], className)}>{icon}{children}</button>;
+}
+
+export function ButtonLink({ href, variant = "secondary", icon, testId, children }: { href: string; variant?: ButtonVariant; icon?: ReactNode; testId?: string; children: ReactNode }) {
+  return <Link href={href} data-testid={testId ? `link-${testId}` : autoId("link", children)} className={cx(buttonBase, buttonStyles[variant])}>{icon}{children}</Link>;
+}
+
+type Tone = "success" | "info" | "warning" | "danger" | "neutral";
+const toneStyles: Record<Tone, string> = {
+  success: "bg-success-bg text-success",
+  info: "bg-info-bg text-info",
+  warning: "bg-warning-bg text-warning",
+  danger: "bg-danger-bg text-danger",
+  neutral: "bg-neutral-bg text-neutral",
+};
+
+// One mapping for every status in D4 so the same word always has the same colour.
+// The label is always written out, so meaning never depends on colour alone.
+const statusTone: Record<string, Tone> = {
+  Completed: "success", Terpenuhi: "success", "On Track": "success",
+  "In Progress": "info", Active: "info", Compiled: "info",
+  Planned: "warning", "Needs Review": "warning", Identified: "warning", Draft: "neutral",
+  Gap: "danger", Cancelled: "danger", "Needs Attention": "danger",
+  // KPI score bands (1–100 scorecards): below 80 yellow, 80–85 average, above 85 high.
+  "Under Performance": "warning", "Average Performance": "info", "High Performance": "success",
+  // Development priority: only High is drawn as a badge, so it stands out in the list (interview 13 Nov 2026).
+  High: "danger",
+  // A row created or changed in the last day (Development Requirement list, 15 Nov 2026).
+  New: "info", Updated: "info",
+  // Reassessment after a Completed development requirement.
+  Retraining: "warning", "Meets requirement": "success", "Needs reassessment": "neutral",
+  "Data Belum Cukup": "neutral", "Bukti Belum Cukup": "neutral", "Not Evaluated": "neutral", "Belum Ada Persyaratan": "neutral", "Belum Ada Posisi": "neutral",
+};
+
+// English display labels for stored values, also the keys the filters compare. Workflow statuses are already English;
+// competency statuses come from D3 in Indonesian. The shown text goes through t(), so it follows the EN/ID toggle.
+const STATUS_LABELS: Record<string, string> = {
+  Terpenuhi: "Met", "Data Belum Cukup": "Insufficient Data", "Bukti Belum Cukup": "Insufficient Data",
+  // No requirement or no position means nothing can be concluded, so it reads as Insufficient Data (3 competency statuses).
+  "Belum Ada Persyaratan": "Insufficient Data", "Belum Ada Posisi": "Insufficient Data",
+};
+
+export const statusLabel = (status: string) => STATUS_LABELS[status] ?? status;
+
+export function StatusBadge({ status }: { status: string }) {
+  const { t } = useLanguage();
+  const tone = statusTone[status] ?? "neutral";
+  return <span data-testid="status-badge" className={cx("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none", toneStyles[tone])}>
+    <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{t(statusLabel(status))}
+  </span>;
+}
+
+/** New / Updated for a row changed in the last day (see recentLabel); nothing otherwise. */
+export function RecentBadge({ label, testId = "label-recent", className = "mt-1 block" }: { label: "New" | "Updated" | null; testId?: string; className?: string }) {
+  const { t } = useLanguage();
+  if (!label) return null;
+  return <span data-testid={testId} title={t("Changed in the last 24 hours")} className={className}><StatusBadge status={label} /></span>;
+}
+
+export function SourceChip({ label, reference, href }: { label: string; reference?: string; href?: string | null }) {
+  const content = <><Link2 aria-hidden="true" className="size-3 shrink-0" /><span className="font-semibold">{label}</span>{reference && <span className="truncate text-ink-2">{reference}</span>}</>;
+  const style = "inline-flex max-w-full items-center gap-1.5 rounded-lg border border-line bg-primary-50 px-2.5 py-1 text-[11px] text-primary-600";
+  return href ? <Link href={href} className={cx(style, "hover:border-primary-500")}>{content}</Link> : <span className={style}>{content}</span>;
+}
+
+export function Card({ title, testId, actions, children, className, padded = true }: { title?: string; testId?: string; actions?: ReactNode; children: ReactNode; className?: string; padded?: boolean }) {
+  return <section data-testid={title ? `card-${testId ?? slug(sourceText(title))}` : undefined} className={cx("min-w-0 rounded-2xl border border-line bg-surface shadow-card", padded && "p-6", className)}>
+    {(title || actions) && <div className={cx("flex flex-wrap items-center justify-between gap-3", padded ? "mb-5" : "px-6 pt-6 pb-4")}>
+      {title && <h2 className="font-display font-semibold text-lg text-ink">{title}</h2>}{actions}
+    </div>}
+    {children}
+  </section>;
+}
+
+export function InfoGrid({ items, columns = 2 }: { items: { label: string; testId?: string; value: ReactNode }[]; columns?: 2 | 3 | 4 }) {
+  const cols = { 2: "sm:grid-cols-2", 3: "sm:grid-cols-2 lg:grid-cols-3", 4: "sm:grid-cols-2 xl:grid-cols-4" }[columns];
+  return <dl className={cx("grid gap-x-8 gap-y-5", cols)}>{items.map((item) => <div key={item.label} data-testid={`info-${item.testId ?? slug(sourceText(item.label))}`} className="min-w-0">
+    <dt className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-3">{item.label}</dt>
+    <dd className="mt-1 break-words text-sm text-ink">{item.value}</dd>
+  </div>)}</dl>;
+}
+
+export function Avatar({ name, size = "md" }: { name: string; size?: "md" | "lg" }) {
+  const letters = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+  return <span aria-hidden="true" className={cx("flex shrink-0 items-center justify-center rounded-full bg-avatar font-semibold text-white", size === "lg" ? "size-16 text-xl" : "size-9 text-xs")}>{letters || "?"}</span>;
+}
+
+export function Notice({ tone = "info", children }: { tone?: "info" | "warning"; children: ReactNode }) {
+  return <p className={cx("rounded-xl px-4 py-3 text-xs leading-5", tone === "warning" ? "bg-warning-bg text-warning" : "bg-info-bg text-primary-700")}>{children}</p>;
+}
+
+/** Lists sort by what still needs work, so a record just saved can move pages away; this points back to it. */
+export function SavedNotice({ text, href }: { text: string; href: string }) {
+  const { t } = useLanguage();
+  return <div data-testid="saved-notice"><Notice>{text} <Link href={href} className="font-semibold underline">{t("View Detail")}</Link></Notice></div>;
+}

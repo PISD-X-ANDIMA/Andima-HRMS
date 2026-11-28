@@ -1,0 +1,26 @@
+import type { Dictionary } from "./types";
+
+export const profile = {
+  "My Profile": { id: "Profil Saya" },
+  "Data akun Anda di HRMS. Data diri diubah oleh HR; password Anda ubah sendiri di sini.": { en: "Your HRMS account. HR changes your personal data; you change your own password here." },
+  "Employee ID": { id: "ID Pegawai" },
+  "Email": { id: "Email" },
+  "Tidak tersedia di pratinjau": { en: "Not available in the preview" },
+  "Change Password": { id: "Ubah Password" },
+  "Current password": { id: "Password saat ini" },
+  "New password": { id: "Password baru" },
+  "Confirm new password": { id: "Konfirmasi password baru" },
+  "Minimal 10 karakter, berisi huruf, angka, dan karakter khusus.": { en: "At least 10 characters, with letters, numbers and special characters." },
+  "Password saat ini wajib diisi.": { en: "Enter your current password." },
+  "Password baru wajib diisi.": { en: "Enter a new password." },
+  "Password minimal 10 karakter.": { en: "The password must be at least 10 characters long." },
+  "Password harus berisi huruf, angka, dan karakter khusus.": { en: "The password must include letters, numbers and special characters." },
+  "Password baru harus berbeda dari password saat ini.": { en: "The new password must differ from the current one." },
+  "Konfirmasi password tidak sama.": { en: "The confirmation does not match the new password." },
+  "Password saat ini salah.": { en: "The current password is wrong." },
+  "Password ditolak server karena terlalu lemah. Pakai password lain.": { en: "The server rejected the password as too weak. Choose another one." },
+  "Sesi berakhir. Silakan login ulang.": { en: "Your session has ended. Please log in again." },
+  "Tidak dapat menghubungi server login. Coba lagi.": { en: "Cannot reach the login server. Try again." },
+  "Password berhasil diubah.": { en: "Password changed." },
+  "Pratinjau: password tidak benar-benar diubah.": { en: "Preview: the password was not actually changed." },
+} satisfies Dictionary;
